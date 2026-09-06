@@ -1,20 +1,36 @@
 import { createTripStore } from './src/trip-store.mjs';
 import { travelBlocks } from './src/travel-blocks.mjs';
-import { projectStore } from './src/project-store.mjs';
+import * as api from './src/api-client.mjs';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
-const currentProject = projectStore.getProject(currentProjectId);
+let currentProject = null;
 
-if (!currentProject) {
-  window.location.href = 'projects.html';
+// 从后端加载项目数据
+async function loadProject() {
+  if (!currentProjectId) {
+    window.location.href = 'projects.html';
+    return false;
+  }
+  
+  currentProject = await api.getProject(currentProjectId);
+  if (!currentProject) {
+    window.location.href = 'projects.html';
+    return false;
+  }
+  
+  return true;
 }
 
 // 更新页面标题和项目名称显示
-document.title = `${currentProject.name} · 协作行程`;
-const projectNameEl = document.querySelector('.trip-switcher strong');
-if (projectNameEl) {
-  projectNameEl.textContent = currentProject.name;
+function updateProjectUI() {
+  if (!currentProject) return;
+  
+  document.title = `${currentProject.name} · 协作行程`;
+  const projectNameEl = document.querySelector('.trip-switcher strong');
+  if (projectNameEl) {
+    projectNameEl.textContent = currentProject.name;
+  }
 }
 
 // 添加返回按钮
@@ -29,78 +45,128 @@ backBtn.addEventListener('click', () => {
 });
 topbar.insertBefore(backBtn, topbar.firstChild.nextSibling);
 
-const days = [
-  { id: 1, label: '10.01', title: '建水 · 古城慢游' },
-  { id: 2, label: '10.02', title: '建水 → 元阳' },
-  { id: 3, label: '10.03', title: '元阳 · 梯田日出' },
-  { id: 4, label: '10.04', title: '蒙自 · 碧色寨' },
-  { id: 5, label: '10.05', title: '普者黑 · 山水' },
-];
+let days = [];
+
+function generateDays(startDate, endDate) {
+  const result = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end - start);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  for (let i = 0; i < diffDays; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    result.push({
+      id: i + 1,
+      label: `${month}.${day}`,
+      title: `第 ${i + 1} 天`
+    });
+  }
+  
+  return result;
+}
 
 const editor = { id: 'feng', name: 'feng' };
 const store = createTripStore();
+const timeline = document.querySelector('#timeline');
+const library = document.querySelector('#block-library');
+const activityList = document.querySelector('#activity-list');
+const aiSourceInput = document.querySelector('#ai-source');
+const aiDrafts = document.querySelector('#ai-drafts');
+let draggedBlockId = null;
 
-// 从项目数据恢复
-if (currentProject.data && currentProject.data.blocks) {
-  const { blocks, timeline, polls, aiDrafts, activity } = currentProject.data;
+// 异步初始化
+async function init() {
+  const loaded = await loadProject();
+  if (!loaded) return;
   
-  // 恢复旅行块
-  blocks.forEach(block => {
-    store.createTravelBlock(block);
-  });
-  
-  // 恢复时间线
-  timeline.forEach(item => {
-    const block = store.snapshot().blocks.find(b => b.name === item.name);
-    if (block) {
-      store.scheduleBlock({ 
-        blockId: block.id, 
-        day: item.day, 
-        time: item.time, 
-        editor: item.editor || editor 
-      });
-    }
-  });
-  
-  // 恢复投票
-  polls.forEach(poll => {
-    const timelineItem = store.snapshot().timeline.find(t => t.name === poll.timelineItemName);
-    if (timelineItem) {
-      const createdPoll = store.createPoll({ 
-        question: poll.question, 
-        timelineItemId: timelineItem.id, 
-        creator: poll.creator 
-      });
-      // 恢复投票
-      Object.entries(poll.votes).forEach(([voterId, choice]) => {
-        store.vote({ pollId: createdPoll.id, voter: { id: voterId, name: voterId }, choice });
-      });
-    }
-  });
-  
-  // 恢复 AI 草案
-  aiDrafts.forEach(draft => {
-    store.createAiDraft(draft);
-  });
-} else {
-  // 初始化默认数据（仅首次）
-  const storeIds = new Map();
-  for (const block of travelBlocks) {
-    const created = store.createTravelBlock(block);
-    storeIds.set(block.id, created.id);
+  // 生成天数
+  if (currentProject.startDate && currentProject.endDate) {
+    days = generateDays(currentProject.startDate, currentProject.endDate);
+  } else {
+    // 默认 5 天
+    days = [
+      { id: 1, label: '第 1 天', title: '第 1 天' },
+      { id: 2, label: '第 2 天', title: '第 2 天' },
+      { id: 3, label: '第 3 天', title: '第 3 天' },
+      { id: 4, label: '第 4 天', title: '第 4 天' },
+      { id: 5, label: '第 5 天', title: '第 5 天' },
+    ];
   }
+  
+  updateProjectUI();
+  
+  // 从项目数据恢复
+  if (currentProject.data && currentProject.data.blocks) {
+    const { blocks, timeline, polls, aiDrafts, activity } = currentProject.data;
+    
+    // 恢复旅行块
+    blocks.forEach(block => {
+      store.createTravelBlock(block);
+    });
+    
+    // 恢复时间线
+    timeline.forEach(item => {
+      const block = store.snapshot().blocks.find(b => b.name === item.name);
+      if (block) {
+        store.scheduleBlock({ 
+          blockId: block.id, 
+          day: item.day, 
+          time: item.time, 
+          editor: item.editor || editor 
+        });
+      }
+    });
+    
+    // 恢复投票
+    polls.forEach(poll => {
+      const timelineItem = store.snapshot().timeline.find(t => t.name === poll.timelineItemName);
+      if (timelineItem) {
+        const createdPoll = store.createPoll({ 
+          question: poll.question, 
+          timelineItemId: timelineItem.id, 
+          creator: poll.creator 
+        });
+        // 恢复投票
+        Object.entries(poll.votes).forEach(([voterId, choice]) => {
+          store.vote({ pollId: createdPoll.id, voter: { id: voterId, name: voterId }, choice });
+        });
+      }
+    });
+    
+    // 恢复 AI 草案
+    aiDrafts.forEach(draft => {
+      store.createAiDraft(draft);
+    });
+  } else {
+    // 初始化默认数据（仅首次）
+    const storeIds = new Map();
+    for (const block of travelBlocks) {
+      const created = store.createTravelBlock(block);
+      storeIds.set(block.id, created.id);
+    }
 
-  function initialBlock(sourceId, day, time) {
-    store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
+    function initialBlock(sourceId, day, time) {
+      store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
+    }
+    initialBlock('jianshui', 1, '10:30');
+    initialBlock('barbecue', 1, '19:00');
+    initialBlock('duoyi-tree', 3, '06:10');
   }
-  initialBlock('jianshui', 1, '10:30');
-  initialBlock('barbecue', 1, '19:00');
-  initialBlock('duoyi-tree', 3, '06:10');
+  
+  renderLibrary();
+  render();
 }
 
-function saveProjectData() {
+// 启动初始化
+init();
+
+async function saveProjectData() {
   const snapshot = store.snapshot();
-  projectStore.updateProjectData(currentProjectId, snapshot);
+  await api.updateProject(currentProjectId, { data: snapshot });
 }
 
 function timelineItemsFor(day) {
