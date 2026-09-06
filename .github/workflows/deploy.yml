@@ -34,4 +34,4 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            nginx -s reload
+            docker exec 1panel-nginx nginx -s reload || docker exec $(docker ps -q -f name=nginx) nginx -s reload
