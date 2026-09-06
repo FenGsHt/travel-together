@@ -12,6 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from pathlib import Path
+from user_manager import create_user, authenticate_user, get_user_by_id, get_all_users
 
 app = Flask(__name__)
 
@@ -91,6 +92,104 @@ def logout():
     """登出"""
     session.clear()
     return jsonify({'success': True})
+
+
+# ============== 用户管理 API ==============
+
+@app.route('/api/users/register', methods=['POST'])
+def register_user():
+    """用户注册"""
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    display_name = data.get('display_name', '').strip() or username
+    
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+    
+    if len(username) < 3:
+        return jsonify({'error': '用户名至少 3 个字符'}), 400
+    
+    if len(password) < 6:
+        return jsonify({'error': '密码至少 6 个字符'}), 400
+    
+    user, error = create_user(username, password, display_name)
+    
+    if error or not user:
+        return jsonify({'error': error or '创建失败'}), 400
+    
+    # 自动登录
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    
+    return jsonify({'success': True, 'user': user})
+
+
+@app.route('/api/users/login', methods=['POST'])
+def login_user():
+    """用户登录"""
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+    
+    user, error = authenticate_user(username, password)
+    
+    if error:
+        return jsonify({'error': error}), 401
+    
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    
+    return jsonify({'success': True, 'user': user})
+
+
+@app.route('/api/users/me', methods=['GET'])
+def get_current_user():
+    """获取当前登录用户信息"""
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        return jsonify({'authenticated': False}), 401
+    
+    user = get_user_by_id(user_id)
+    
+    if not user:
+        session.clear()
+        return jsonify({'authenticated': False}), 401
+    
+    return jsonify({'authenticated': True, 'user': user})
+
+
+@app.route('/api/users', methods=['GET'])
+def list_users():
+    """获取所有用户列表"""
+    users = get_all_users()
+    return jsonify({'users': users})
+
+
+def require_user_auth(f):
+    """用户认证装饰器"""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = session.get('user_id')
+        
+        if not user_id:
+            return jsonify({'error': '未登录'}), 401
+        
+        user = get_user_by_id(user_id)
+        if not user:
+            session.clear()
+            return jsonify({'error': '用户不存在'}), 401
+        
+        request.current_user = user
+        return f(*args, **kwargs)
+    
+    return decorated
 
 
 # ============== 项目管理 API ==============
