@@ -255,6 +255,122 @@
       color: var(--ink);
     }
 
+    .members-section {
+      margin-bottom: 24px;
+    }
+
+    .members-section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--ink);
+    }
+
+    .members-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .member-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--paper);
+      border-radius: 8px;
+    }
+
+    .member-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--green);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .member-info {
+      flex: 1;
+    }
+
+    .member-name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+
+    .member-role {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .member-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .member-actions select {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 13px;
+      background: white;
+    }
+
+    .member-actions button {
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 13px;
+      background: white;
+      color: var(--terracotta);
+    }
+
+    .member-actions button:hover {
+      background: var(--terracotta);
+      color: white;
+    }
+
+    .invite-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .invite-form select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 14px;
+      background: var(--surface);
+    }
+
+    .project-card-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .project-card-actions button {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 13px;
+      background: white;
+    }
+
+    .project-card-actions button:hover {
+      background: var(--green-soft);
+      border-color: var(--green);
+    }
+
     @media (max-width: 760px) {
       .topbar { height: 62px; padding: 0 14px; }
       .container { padding: 24px 16px; }
@@ -316,6 +432,35 @@
         <button type="submit" class="button button-ink">创建项目</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="members-dialog">
+    <h2>管理成员 - <span id="members-project-name"></span></h2>
+    <div class="members-section">
+      <h3>当前成员</h3>
+      <div id="members-list" class="members-list"></div>
+    </div>
+    <div class="members-section">
+      <h3>邀请新成员</h3>
+      <div class="invite-form">
+        <div class="form-group">
+          <label for="invite-username">用户名</label>
+          <input type="text" id="invite-username" placeholder="输入要邀请的用户名" />
+        </div>
+        <div class="form-group">
+          <label for="invite-role">角色</label>
+          <select id="invite-role">
+            <option value="editor">编辑者</option>
+            <option value="viewer">查看者</option>
+            <option value="owner">所有者</option>
+          </select>
+        </div>
+        <button class="button button-ink" id="invite-btn">邀请</button>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="button button-ghost" id="close-members-btn">关闭</button>
+    </div>
   </dialog>
 
   <script type="module">
@@ -427,16 +572,32 @@
                   <span>行程项</span>
                 </div>
               </div>
+              <div class="project-card-actions">
+                <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
+                <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
+              </div>
             </div>
           `).join('')}
         </div>
       `;
       
-      document.querySelectorAll('.project-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const projectId = card.dataset.id;
+      // 绑定进入项目按钮
+      document.querySelectorAll('.enter-project-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const projectId = btn.dataset.id;
           localStorage.setItem('currentProjectId', projectId);
           window.location.href = 'index.html';
+        });
+      });
+      
+      // 绑定管理成员按钮
+      document.querySelectorAll('.manage-members-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const projectId = btn.dataset.id;
+          const projectName = btn.dataset.name;
+          await openMembersDialog(projectId, projectName);
         });
       });
     }
@@ -471,6 +632,198 @@
         createForm.reset();
         loadProjects();
       }
+    });
+    
+    // 成员管理相关
+    const membersDialog = document.getElementById('members-dialog');
+    const membersList = document.getElementById('members-list');
+    const membersProjectName = document.getElementById('members-project-name');
+    let currentManageProjectId = null;
+    
+    // 打开成员管理弹窗
+    async function openMembersDialog(projectId, projectName) {
+      currentManageProjectId = projectId;
+      membersProjectName.textContent = projectName;
+      membersDialog.showModal();
+      await loadMembers(projectId);
+    }
+    
+    // 加载成员列表
+    async function loadMembers(projectId) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/projects/${projectId}/members`, {
+          credentials: 'include'
+        });
+        
+        if (!resp.ok) {
+          throw new Error('加载成员失败');
+        }
+        
+        const data = await resp.json();
+        renderMembers(data.members);
+      } catch (error) {
+        console.error('Load members failed:', error);
+        membersList.innerHTML = '<div class="empty-state">加载成员失败</div>';
+      }
+    }
+    
+    // 渲染成员列表
+    function renderMembers(members) {
+      if (members.length === 0) {
+        membersList.innerHTML = '<div class="empty-state">暂无成员</div>';
+        return;
+      }
+      
+      membersList.innerHTML = members.map(member => `
+        <div class="member-item" data-user-id="${member.userId}">
+          <div class="member-avatar">${member.displayName.charAt(0).toUpperCase()}</div>
+          <div class="member-info">
+            <div class="member-name">${escapeHtml(member.displayName)} <small style="color: var(--muted);">@${escapeHtml(member.username)}</small></div>
+            <div class="member-role">${getRoleName(member.role)}</div>
+          </div>
+          <div class="member-actions">
+            <select class="role-select" data-user-id="${member.userId}">
+              <option value="owner" ${member.role === 'owner' ? 'selected' : ''}>所有者</option>
+              <option value="editor" ${member.role === 'editor' ? 'selected' : ''}>编辑者</option>
+              <option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>查看者</option>
+            </select>
+            <button class="remove-member-btn" data-user-id="${member.userId}">移除</button>
+          </div>
+        </div>
+      `).join('');
+      
+      // 绑定角色修改事件
+      document.querySelectorAll('.role-select').forEach(select => {
+        select.addEventListener('change', async (e) => {
+          const userId = e.target.dataset.userId;
+          const newRole = e.target.value;
+          await updateMemberRole(userId, newRole);
+        });
+      });
+      
+      // 绑定移除成员事件
+      document.querySelectorAll('.remove-member-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const userId = e.target.dataset.userId;
+          if (confirm('确定要移除这个成员吗？')) {
+            await removeMember(userId);
+          }
+        });
+      });
+    }
+    
+    // 获取角色名称
+    function getRoleName(role) {
+      const roles = {
+        owner: '所有者',
+        editor: '编辑者',
+        viewer: '查看者'
+      };
+      return roles[role] || role;
+    }
+    
+    // 邀请成员
+    document.getElementById('invite-btn').addEventListener('click', async () => {
+      const username = document.getElementById('invite-username').value.trim();
+      const role = document.getElementById('invite-role').value;
+      
+      if (!username) {
+        alert('请输入用户名');
+        return;
+      }
+      
+      try {
+        // 先获取用户 ID
+        const usersResp = await fetch(`${API_BASE}/api/users`, {
+          credentials: 'include'
+        });
+        const usersData = await usersResp.json();
+        const user = usersData.users.find(u => u.username === username);
+        
+        if (!user) {
+          alert('用户不存在');
+          return;
+        }
+        
+        // 邀请成员
+        const resp = await fetch(`${API_BASE}/api/projects/${currentManageProjectId}/invite`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            userId: user.id,
+            role: role
+          })
+        });
+        
+        if (!resp.ok) {
+          const error = await resp.json();
+          throw new Error(error.error || '邀请失败');
+        }
+        
+        alert('邀请成功！');
+        document.getElementById('invite-username').value = '';
+        await loadMembers(currentManageProjectId);
+        loadProjects(); // 刷新项目列表以更新成员数
+      } catch (error) {
+        console.error('Invite failed:', error);
+        alert(error.message);
+      }
+    });
+    
+    // 修改成员角色
+    async function updateMemberRole(userId, newRole) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/projects/${currentManageProjectId}/members/${userId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ role: newRole })
+        });
+        
+        if (!resp.ok) {
+          const error = await resp.json();
+          throw new Error(error.error || '修改角色失败');
+        }
+        
+        alert('角色已更新');
+        await loadMembers(currentManageProjectId);
+      } catch (error) {
+        console.error('Update role failed:', error);
+        alert(error.message);
+        await loadMembers(currentManageProjectId); // 恢复原状
+      }
+    }
+    
+    // 移除成员
+    async function removeMember(userId) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/projects/${currentManageProjectId}/members/${userId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        
+        if (!resp.ok) {
+          const error = await resp.json();
+          throw new Error(error.error || '移除失败');
+        }
+        
+        alert('成员已移除');
+        await loadMembers(currentManageProjectId);
+        loadProjects(); // 刷新项目列表以更新成员数
+      } catch (error) {
+        console.error('Remove member failed:', error);
+        alert(error.message);
+      }
+    }
+    
+    // 关闭成员管理弹窗
+    document.getElementById('close-members-btn').addEventListener('click', () => {
+      membersDialog.close();
     });
   </script>
 </body>
