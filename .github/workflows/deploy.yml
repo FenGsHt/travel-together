@@ -37,6 +37,20 @@ jobs:
           target: "/opt/1panel/www/sites/travel-together/backend"
           strip_components: 1
 
+      - name: Create Backend .env
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/1panel/www/sites/travel-together/backend
+            cat > .env << 'ENVEOF'
+            FLASK_SECRET_KEY=${{ secrets.FLASK_SECRET_KEY }}
+            SITE_ACCESS_TOKEN=${{ secrets.SITE_ACCESS_TOKEN }}
+            FLASK_PORT=5000
+            ENVEOF
+
       - name: Install Backend Dependencies
         uses: appleboy/ssh-action@v1.0.3
         with:
