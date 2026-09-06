@@ -135,32 +135,39 @@ async function init() {
       store.createTravelBlock(block);
     });
     
-    // 恢复时间线
+    // 恢复时间线，并保留旧 ID 到新 ID 的映射以恢复关联投票。
+    const timelineIdMap = new Map();
     timeline.forEach(item => {
       const block = store.snapshot().blocks.find(b => b.name === item.name);
       if (block) {
-        store.scheduleBlock({ 
-          blockId: block.id, 
-          day: item.day, 
-          time: item.time, 
-          editor: item.editor || editor 
+        const createdTimelineItem = store.scheduleBlock({
+          blockId: block.id,
+          day: item.day,
+          time: item.time,
+          editor: item.editor || editor
         });
+        timelineIdMap.set(item.id, createdTimelineItem.id);
+        if (item.note) {
+          store.editTimelineItem({ timelineId: createdTimelineItem.id, note: item.note, editor: item.editor || editor });
+        }
       }
     });
     
     // 恢复投票
     polls.forEach(poll => {
-      const timelineItem = store.snapshot().timeline.find(t => t.name === poll.timelineItemName);
+      const restoredTimelineId = timelineIdMap.get(poll.timelineItemId);
+      const timelineItem = store.snapshot().timeline.find((item) => (
+        item.id === restoredTimelineId || (!restoredTimelineId && item.name === poll.timelineItemName)
+      ));
       if (timelineItem) {
-        const createdPoll = store.createPoll({ 
-          question: poll.question, 
-          timelineItemId: timelineItem.id, 
-          creator: poll.creator 
+        const createdPoll = store.createPoll({
+          question: poll.question,
+          timelineItemId: timelineItem.id,
+          creator: poll.creator || editor,
+          options: poll.options,
+          deadlineAt: poll.deadlineAt,
         });
-        // 恢复投票
-        Object.entries(poll.votes).forEach(([voterId, choice]) => {
-          store.vote({ pollId: createdPoll.id, voter: { id: voterId, name: voterId }, choice });
-        });
+        store.restorePollVotes({ pollId: createdPoll.id, votes: poll.votes || {} });
       }
     });
     
@@ -319,8 +326,19 @@ function createTimelineCard(item) {
   if (pollBtn) {
     pollBtn.addEventListener('click', () => {
       const question = prompt('投票问题：');
-      if (question) {
-        store.createPoll({ question, timelineItemId: item.id, creator: editor });
+      if (question?.trim()) {
+        const rawOptions = prompt('投票选项（用逗号分隔）：', '赞成,反对');
+        if (rawOptions === null) return;
+        const options = rawOptions.split(',').map((option) => option.trim()).filter(Boolean);
+        const rawDeadline = prompt('投票截止时间（YYYY-MM-DD HH:mm，留空表示不截止）：', '');
+        if (rawDeadline === null) return;
+        const deadlineAt = rawDeadline.trim() ? rawDeadline.trim().replace(' ', 'T') : null;
+        try {
+          store.createPoll({ question, timelineItemId: item.id, creator: editor, options, deadlineAt });
+        } catch (error) {
+          alert(error.message);
+          return;
+        }
         render();
       }
     });
@@ -342,23 +360,36 @@ function renderPollCard(poll) {
   const results = store.getPollResults(poll.id);
   const userVote = poll.votes[editor.id];
   const total = results.total || 1;
-  const yesPercent = Math.round((results.yes / total) * 100);
-  const noPercent = Math.round((results.no / total) * 100);
+  const pollIsOpen = store.isPollOpen(poll.id);
+  const deadline = poll.deadlineAt
+    ? `截止：${new Date(poll.deadlineAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}`
+    : '不限时';
+  const optionsHtml = poll.options.map((option) => {
+    const percent = Math.round((results[option] / total) * 100);
+    const voted = userVote === option ? 'voted' : '';
+    return `<button class="vote-btn ${voted}" data-poll-id="${poll.id}" data-choice="${escapeHtml(option)}" ${pollIsOpen ? '' : 'disabled'}>
+      ${escapeHtml(option)} ${results[option]} (${percent}%)
+    </button>`;
+  }).join('');
   
   return `
     <div class="poll-card" data-poll-id="${poll.id}">
-      <div class="poll-question">${poll.question}</div>
+      <div class="poll-question">${escapeHtml(poll.question)}</div>
       <div class="poll-options">
-        <button class="vote-btn ${userVote === 'yes' ? 'voted' : ''}" data-poll-id="${poll.id}" data-choice="yes">
-          👍 ${results.yes} (${yesPercent}%)
-        </button>
-        <button class="vote-btn ${userVote === 'no' ? 'voted' : ''}" data-poll-id="${poll.id}" data-choice="no">
-          👎 ${results.no} (${noPercent}%)
-        </button>
+        ${optionsHtml}
       </div>
-      <div class="poll-total">共 ${results.total} 人投票</div>
+      <div class="poll-total">${pollIsOpen ? deadline : `投票已截止 · ${deadline}`} · 共 ${results.total} 人投票</div>
     </div>
   `;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function renderTimeline() {

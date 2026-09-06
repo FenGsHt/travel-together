@@ -56,6 +56,35 @@ export function createTripStore() {
     return item;
   }
 
+  function findPoll(pollId) {
+    const poll = state.polls.find((candidate) => candidate.id === pollId);
+    if (!poll) throw new Error('Poll not found');
+    return poll;
+  }
+
+  function normalizePollOptions(options) {
+    const normalized = (options ?? ['yes', 'no'])
+      .filter((option) => typeof option === 'string')
+      .map((option) => option.trim())
+      .filter(Boolean);
+    const uniqueOptions = [...new Set(normalized)];
+    if (uniqueOptions.length < 2) {
+      throw new Error('A poll needs at least two options');
+    }
+    return uniqueOptions;
+  }
+
+  function normalizeDeadline(deadlineAt) {
+    if (!deadlineAt) return null;
+    const date = new Date(deadlineAt);
+    if (Number.isNaN(date.getTime())) throw new Error('Poll deadline is invalid');
+    return date.toISOString();
+  }
+
+  function pollIsOpen(poll, now = new Date()) {
+    return !poll.deadlineAt || new Date(poll.deadlineAt) > now;
+  }
+
   return {
     createTravelBlock({ name, image }) {
       if (!name?.trim() || !image?.trim()) {
@@ -165,14 +194,18 @@ export function createTripStore() {
       return structuredClone(item);
     },
 
-    createPoll({ question, timelineItemId, creator }) {
+    createPoll({ question, timelineItemId, creator, options, deadlineAt }) {
       requireMember(creator);
+      const normalizedOptions = normalizePollOptions(options);
+      const normalizedDeadline = normalizeDeadline(deadlineAt);
       checkpoint();
       const poll = {
         id: `poll-${++pollSequence}`,
         question,
         timelineItemId,
         creator: { id: creator.id, name: creator.name },
+        options: normalizedOptions,
+        deadlineAt: normalizedDeadline,
         votes: {},
       };
       state.polls.push(poll);
@@ -182,12 +215,31 @@ export function createTripStore() {
 
     vote({ pollId, voter, choice }) {
       requireMember(voter);
-      const poll = state.polls.find((candidate) => candidate.id === pollId);
-      if (!poll) throw new Error('Poll not found');
+      const poll = findPoll(pollId);
+      if (!pollIsOpen(poll)) throw new Error('Poll has ended');
+      if (!poll.options.includes(choice)) throw new Error('Poll option not found');
       checkpoint();
       poll.votes[voter.id] = choice;
       record('poll.voted', voter, { pollId, choice });
       return structuredClone(poll);
+    },
+
+    restorePollVotes({ pollId, votes }) {
+      const poll = findPoll(pollId);
+      if (!votes || typeof votes !== 'object' || Array.isArray(votes)) {
+        throw new Error('Poll votes must be an object');
+      }
+      const restoredVotes = {};
+      Object.entries(votes).forEach(([voterId, choice]) => {
+        if (!poll.options.includes(choice)) throw new Error('Poll option not found');
+        restoredVotes[voterId] = choice;
+      });
+      poll.votes = restoredVotes;
+      return structuredClone(poll);
+    },
+
+    isPollOpen(pollId, now) {
+      return pollIsOpen(findPoll(pollId), now);
     },
 
     undo() {
@@ -210,12 +262,11 @@ export function createTripStore() {
     },
 
     getPollResults(pollId) {
-      const poll = state.polls.find((candidate) => candidate.id === pollId);
-      if (!poll) throw new Error('Poll not found');
-      const results = { yes: 0, no: 0, total: 0 };
+      const poll = findPoll(pollId);
+      const results = Object.fromEntries(poll.options.map((option) => [option, 0]));
+      results.total = 0;
       Object.values(poll.votes).forEach((choice) => {
-        if (choice === 'yes') results.yes++;
-        else if (choice === 'no') results.no++;
+        if (Object.hasOwn(results, choice)) results[choice]++;
         results.total++;
       });
       return results;
