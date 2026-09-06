@@ -60,4 +60,12 @@ jobs:
           script: |
             cd /opt/1panel/www/sites/travel-together/backend
             python3 -m pip install --user -r requirements.txt
-            sudo systemctl restart travel-together-backend || sudo systemctl start travel-together-backend
+            
+            # 安装 systemd 服务（如果不存在）
+            if [ ! -f /etc/systemd/system/travel-together-backend.service ]; then
+              sudo cp travel-together-backend.service /etc/systemd/system/
+              sudo systemctl daemon-reload
+              sudo systemctl enable travel-together-backend
+            fi
+            
+            sudo systemctl restart travel-together-backend
