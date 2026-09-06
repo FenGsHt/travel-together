@@ -24,7 +24,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "index.html,app.js,src/*,styles.css,diannan-images/*"
-          target: "/www/wwwroot/travel-together"
+          target: "/opt/1panel/www/sites/travel-together/index"
           strip_components: 0
 
       - name: Reload Nginx
