@@ -2,17 +2,28 @@ import { createTripStore } from './src/trip-store.mjs';
 import { travelBlocks } from './src/travel-blocks.mjs';
 import * as api from './src/api-client.mjs';
 import { createProjectAutosave } from './src/project-autosave.mjs';
+import { findTimeConflicts } from './src/timeline-conflicts.mjs';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
 let currentProject = null;
 let autosaveEnabled = false;
+let pendingConflictSnapshot = null;
 
 const projectAutosave = createProjectAutosave({
   delay: 500,
   save: async (data) => {
-    if (!currentProjectId) return;
-    const updatedProject = await api.updateProject(currentProjectId, { data });
+    if (!currentProjectId || !currentProject) return;
+    const updatedProject = await api.updateProject(currentProjectId, {
+      data,
+      expectedRevision: currentProject.revision,
+    });
+    if (updatedProject && updatedProject.conflict) {
+      pendingConflictSnapshot = data;
+      currentProject = updatedProject.project;
+      showEditConflict();
+      return;
+    }
     if (!updatedProject || updatedProject.error) {
       throw new Error('保存项目失败');
     }
@@ -91,6 +102,7 @@ const library = document.querySelector('#block-library');
 const activityList = document.querySelector('#activity-list');
 const aiSourceInput = document.querySelector('#ai-source');
 const aiDrafts = document.querySelector('#ai-drafts');
+const editConflictDialog = document.querySelector('#edit-conflict-dialog');
 let draggedBlockId = null;
 
 // 异步初始化
@@ -186,6 +198,30 @@ function saveProjectData() {
   projectAutosave.schedule(store.snapshot());
 }
 
+function showEditConflict() {
+  if (!editConflictDialog.open) editConflictDialog.showModal();
+}
+
+async function overwriteRemoteProject() {
+  if (!pendingConflictSnapshot || !currentProject) return;
+
+  const updatedProject = await api.updateProject(currentProjectId, {
+    data: pendingConflictSnapshot,
+    expectedRevision: currentProject.revision,
+  });
+  if (updatedProject && updatedProject.conflict) {
+    currentProject = updatedProject.project;
+    return;
+  }
+  if (!updatedProject || updatedProject.error) {
+    throw new Error('覆盖保存失败');
+  }
+
+  currentProject = updatedProject;
+  pendingConflictSnapshot = null;
+  editConflictDialog.close();
+}
+
 function timelineItemsFor(day) {
   return store.snapshot().timeline
     .filter((item) => item.day === day)
@@ -200,6 +236,10 @@ function createTimelineCard(item) {
   
   const poll = store.snapshot().polls.find(p => p.timelineItemId === item.id);
   const pollHtml = poll ? renderPollCard(poll) : `<button class="poll-btn" data-timeline-id="${item.id}">发起投票</button>`;
+  const timeConflicts = findTimeConflicts(store.snapshot().timeline, item);
+  const timeConflictHtml = timeConflicts.length
+    ? `<p class="time-conflict" role="alert">时间冲突：${timeConflicts.map((conflict) => conflict.name).join('、')} 也安排在 ${item.time}</p>`
+    : '';
   
   card.innerHTML = `
     <img src="${item.image}" alt="${item.name}">
@@ -207,6 +247,7 @@ function createTimelineCard(item) {
     <div>
       <div class="name">${item.name}</div>
       <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
+      ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
     </div>
     <span class="drag-handle" aria-label="可拖动">⠿</span>
@@ -447,6 +488,15 @@ function render({ persist = autosaveEnabled } = {}) {
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
 document.querySelector('#invite-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
 document.querySelector('.dialog-close').addEventListener('click', () => document.querySelector('#invite-dialog').close());
+document.querySelector('#reload-conflict').addEventListener('click', () => window.location.reload());
+document.querySelector('#overwrite-conflict').addEventListener('click', async () => {
+  try {
+    await overwriteRemoteProject();
+  } catch (error) {
+    console.error('Project overwrite failed:', error);
+    alert('覆盖保存失败，请稍后重试。');
+  }
+});
 document.querySelector('#copy-invite').addEventListener('click', async (event) => {
   await navigator.clipboard?.writeText('travel-together/diannan-oct');
   event.target.textContent = '已复制';

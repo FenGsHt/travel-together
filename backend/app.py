@@ -9,6 +9,7 @@ import json
 import hmac
 import hashlib
 import fcntl
+from contextlib import contextmanager
 from datetime import datetime
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
@@ -31,6 +32,7 @@ CORS(app, supports_credentials=True)
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 PROJECTS_FILE = DATA_DIR / "projects.json"
+PROJECTS_LOCK_FILE = DATA_DIR / "projects.lock"
 
 # 访问令牌（从环境变量读取）
 SITE_ACCESS_TOKEN = os.getenv('SITE_ACCESS_TOKEN', '')
@@ -196,10 +198,10 @@ def require_user_auth(f):
 # ============== 项目管理 API ==============
 
 def load_projects():
-    """加载项目数据（带文件锁）"""
+    """加载项目数据（带共享文件锁）。"""
     if not PROJECTS_FILE.exists():
         return []
-    
+
     with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_SH)
         try:
@@ -209,13 +211,40 @@ def load_projects():
 
 
 def save_projects(projects):
-    """保存项目数据（带文件锁）"""
+    """保存项目数据（带独占文件锁）。"""
     with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             json.dump(projects, f, ensure_ascii=False, indent=2)
         finally:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def locked_projects_for_update():
+    """在读取、比较版本与写入的整个更新周期内保持独占锁。"""
+    with open(PROJECTS_LOCK_FILE, "a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        projects = None
+        try:
+            projects = []
+            if PROJECTS_FILE.exists():
+                with open(PROJECTS_FILE, "r", encoding="utf-8") as projects_file:
+                    projects = json.load(projects_file)
+            yield projects
+        finally:
+            if projects is not None:
+                with open(PROJECTS_FILE, "w", encoding="utf-8") as projects_file:
+                    json.dump(projects, projects_file, ensure_ascii=False, indent=2)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def project_revision(project):
+    """为旧项目提供稳定的初始版本号。"""
+    try:
+        return max(1, int(project.get('revision', 1)))
+    except (TypeError, ValueError):
+        return 1
 
 
 def require_auth(f):
@@ -268,6 +297,8 @@ def require_ai_auth(f):
 def get_projects():
     """获取所有项目"""
     projects = load_projects()
+    for project in projects:
+        project['revision'] = project_revision(project)
     return jsonify(projects)
 
 
@@ -292,6 +323,7 @@ def create_project():
         'endDate': data.get('endDate', ''),
         'createdAt': datetime.now().isoformat(),
         'updatedAt': datetime.now().isoformat(),
+        'revision': 1,
         'members': [
             {
                 'userId': owner_id,
@@ -324,42 +356,57 @@ def get_project(project_id):
     
     if not project:
         return jsonify({'error': '项目不存在'}), 404
-    
+
+    project['revision'] = project_revision(project)
     return jsonify(project)
 
 
 @app.route('/api/projects/<project_id>', methods=['PUT'])
 @require_auth
 def update_project(project_id):
-    """更新项目"""
-    projects = load_projects()
-    project = next((p for p in projects if p['id'] == project_id), None)
-    
-    if not project:
-        return jsonify({'error': '项目不存在'}), 404
-    
+    """更新项目，并以乐观锁避免静默覆盖同行人的修改。"""
     data = request.get_json(silent=True) or {}
-    
-    # 更新基本信息
-    if 'name' in data:
-        project['name'] = data['name']
-    if 'description' in data:
-        project['description'] = data['description']
-    if 'destination' in data:
-        project['destination'] = data['destination']
-    if 'startDate' in data:
-        project['startDate'] = data['startDate']
-    if 'endDate' in data:
-        project['endDate'] = data['endDate']
-    
-    # 更新项目数据
-    if 'data' in data:
-        project['data'] = data['data']
-    
-    project['updatedAt'] = datetime.now().isoformat()
-    save_projects(projects)
-    
-    return jsonify(project)
+    expected_revision = data.get('expectedRevision')
+
+    if expected_revision is not None:
+        try:
+            expected_revision = int(expected_revision)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'expectedRevision 必须是整数'}), 400
+
+    with locked_projects_for_update() as projects:
+        project = next((p for p in projects if p['id'] == project_id), None)
+
+        if not project:
+            return jsonify({'error': '项目不存在'}), 404
+
+        current_revision = project_revision(project)
+        project['revision'] = current_revision
+        if expected_revision is not None and expected_revision != current_revision:
+            return jsonify({
+                'error': '编辑冲突',
+                'project': project,
+            }), 409
+
+        # 更新基本信息
+        if 'name' in data:
+            project['name'] = data['name']
+        if 'description' in data:
+            project['description'] = data['description']
+        if 'destination' in data:
+            project['destination'] = data['destination']
+        if 'startDate' in data:
+            project['startDate'] = data['startDate']
+        if 'endDate' in data:
+            project['endDate'] = data['endDate']
+
+        # 更新项目数据
+        if 'data' in data:
+            project['data'] = data['data']
+
+        project['revision'] = current_revision + 1
+        project['updatedAt'] = datetime.now().isoformat()
+        return jsonify(project)
 
 
 @app.route('/api/projects/<project_id>', methods=['DELETE'])

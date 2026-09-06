@@ -150,6 +150,16 @@
     <div class="invite-link"><code>travel-together/diannan-oct</code><button id="copy-invite">复制</button></div>
   </dialog>
 
+  <dialog id="edit-conflict-dialog">
+    <p class="eyebrow">检测到同行人更新</p>
+    <h2>这份行程刚刚被其他成员修改</h2>
+    <p>为避免悄悄覆盖对方的内容，自动保存已暂停。你可以先加载最新行程，或明确选择用当前修改覆盖它。</p>
+    <div class="conflict-actions">
+      <button class="button button-ghost" id="reload-conflict">加载最新行程</button>
+      <button class="button button-ink" id="overwrite-conflict">仍要覆盖保存</button>
+    </div>
+  </dialog>
+
   <template id="timeline-day-template">
     <article class="day-column">
       <header><span class="day-number"></span><div><p class="eyebrow"></p><h3></h3></div><button class="add-slot" title="添加空白时间">＋</button></header>

@@ -63,7 +63,11 @@ export async function updateProject(projectId, data) {
     window.location.href = 'login.html';
     return null;
   }
-  return await resp.json();
+  const payload = await resp.json();
+  if (resp.status === 409) {
+    return { conflict: true, project: payload.project };
+  }
+  return payload;
 }
 
 export async function deleteProject(projectId) {
