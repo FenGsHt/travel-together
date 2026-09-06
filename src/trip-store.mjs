@@ -117,6 +117,38 @@ export function createTripStore() {
       return structuredClone(item);
     },
 
+    moveTimelineItem({ timelineId, day, time, editor }) {
+      requireMember(editor);
+      const item = findTimelineItem(timelineId);
+      if (day !== undefined) item.day = Number(day);
+      if (time !== undefined) item.time = time;
+      record('timeline.moved', editor, { timelineId: item.id, day: item.day, time: item.time });
+      return structuredClone(item);
+    },
+
+    reorderTimeline({ timelineId, newIndex, day, editor }) {
+      requireMember(editor);
+      const item = findTimelineItem(timelineId);
+      const dayItems = state.timeline.filter(i => i.day === day).sort((a, b) => a.time.localeCompare(b.time));
+      const currentIndex = dayItems.findIndex(i => i.id === timelineId);
+      
+      if (currentIndex === -1) throw new Error('Item not in this day');
+      
+      // Remove from current position
+      dayItems.splice(currentIndex, 1);
+      // Insert at new position
+      dayItems.splice(newIndex, 0, item);
+      
+      // Update times based on new order
+      dayItems.forEach((i, idx) => {
+        const hour = String(9 + idx * 2).padStart(2, '0');
+        i.time = `${hour}:00`;
+      });
+      
+      record('timeline.reordered', editor, { timelineId: item.id, day, newIndex });
+      return structuredClone(item);
+    },
+
     createPoll({ question, timelineItemId, creator }) {
       requireMember(creator);
       const poll = {

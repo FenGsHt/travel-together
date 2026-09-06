@@ -179,6 +179,7 @@ function createTimelineCard(item) {
   const card = document.createElement('article');
   card.className = 'timeline-card';
   card.dataset.timelineId = item.id;
+  card.draggable = true;
   
   const poll = store.snapshot().polls.find(p => p.timelineItemId === item.id);
   const pollHtml = poll ? renderPollCard(poll) : `<button class="poll-btn" data-timeline-id="${item.id}">发起投票</button>`;
@@ -201,6 +202,58 @@ function createTimelineCard(item) {
   });
   noteInput.addEventListener('change', () => {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
+    render();
+  });
+  
+  // Drag and drop for reordering and cross-day moves
+  card.addEventListener('dragstart', (event) => {
+    event.stopPropagation();
+    card.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/timeline-item', item.id);
+  });
+  
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    document.querySelectorAll('.timeline-card.drag-over').forEach(c => c.classList.remove('drag-over'));
+  });
+  
+  card.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const draggingItem = document.querySelector('.timeline-card.dragging');
+    if (draggingItem && draggingItem !== card) {
+      card.classList.add('drag-over');
+    }
+  });
+  
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drag-over');
+  });
+  
+  card.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    card.classList.remove('drag-over');
+    
+    const draggedItemId = event.dataTransfer.getData('text/timeline-item');
+    if (!draggedItemId || draggedItemId === item.id) return;
+    
+    // Get the day of the target card
+    const targetDay = item.day;
+    
+    // Get all items in this day
+    const dayItems = timelineItemsFor(targetDay);
+    const targetIndex = dayItems.findIndex(i => i.id === item.id);
+    
+    if (targetIndex === -1) return;
+    
+    // Move the item
+    store.moveTimelineItem({ timelineId: draggedItemId, day: targetDay, editor });
+    
+    // Reorder
+    store.reorderTimeline({ timelineId: draggedItemId, newIndex: targetIndex, day: targetDay, editor });
+    
     render();
   });
   
