@@ -15,6 +15,11 @@
     if (localStorage.getItem('authenticated') !== 'true') {
       window.location.href = 'login.html';
     }
+    
+    // 检查是否有当前项目
+    if (!localStorage.getItem('currentProjectId')) {
+      window.location.href = 'projects.html';
+    }
   </script>
 </head>
 <body>

@@ -1,4 +1,44 @@
+# 环境变量
+.env
+*.env
 
-# SSH deploy keys
-.github/deploy_key
-.github/deploy_key.pub
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 数据文件（运行时生成）
+backend/data/
+
+# 日志
+*.log
+.github/deploy_key*

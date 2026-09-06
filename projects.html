@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1e8" />
+  <title>我的旅行项目</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f5f1e8;
+      --paper-deep: #ebe5d8;
+      --surface: #fffcf6;
+      --ink: #21312d;
+      --muted: #6f7871;
+      --line: #dcd6c9;
+      --green: #255f4d;
+      --green-soft: #dce9de;
+      --terracotta: #b75235;
+      --sun: #e8b34b;
+      --shadow: 0 12px 28px rgba(46, 54, 42, .08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { color: var(--ink); background: var(--paper); font-family: 'Noto Sans SC', sans-serif; min-height: 100vh; }
+    button { cursor: pointer; font: inherit; }
+
+    .topbar {
+      height: 76px;
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,252,246,.93);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--ink);
+      font-family: 'Noto Serif SC', serif;
+      font-size: 18px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--green);
+      border-radius: 50% 50% 42% 42%;
+      font-family: 'Noto Serif SC', serif;
+    }
+
+    .top-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+
+    .button {
+      min-height: 36px;
+      padding: 0 13px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .button-ink { color: #fff; background: var(--ink); border-color: var(--ink); }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 28px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 32px;
+    }
+
+    .page-header h1 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .page-header p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .project-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .project-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .project-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .project-card h3 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .project-meta {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .project-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .project-desc {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .project-stats {
+      display: flex;
+      gap: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 24px;
+      margin-bottom: 12px;
+      color: var(--ink);
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    dialog {
+      width: min(500px, calc(100vw - 32px));
+      padding: 32px;
+      border: 0;
+      border-radius: 12px;
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 24px 70px rgba(0,0,0,.22);
+    }
+
+    dialog::backdrop {
+      background: rgba(33, 49, 45, 0.5);
+    }
+
+    dialog h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 24px;
+      margin-bottom: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 14px;
+      background: var(--surface);
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--green);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 28px;
+    }
+
+    .button-ghost {
+      background: transparent;
+      color: var(--ink);
+    }
+
+    @media (max-width: 760px) {
+      .topbar { height: 62px; padding: 0 14px; }
+      .container { padding: 24px 16px; }
+      .page-header h1 { font-size: 22px; }
+      .project-grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a class="brand" href="projects.html">
+      <span class="brand-mark">南</span>
+      <span>一起去滇南</span>
+    </a>
+    <div class="top-actions">
+      <button class="button button-ink" id="create-btn">+ 新建项目</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>我的旅行项目</h1>
+        <p>管理你的所有旅行计划</p>
+      </div>
+    </div>
+
+    <div id="projects-container"></div>
+  </div>
+
+  <dialog id="create-dialog">
+    <h2>新建旅行项目</h2>
+    <form id="create-form">
+      <div class="form-group">
+        <label for="project-name">项目名称 *</label>
+        <input type="text" id="project-name" required placeholder="例如：国庆滇南之旅" />
+      </div>
+      <div class="form-group">
+        <label for="project-destination">目的地</label>
+        <input type="text" id="project-destination" placeholder="例如：云南·滇南" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="project-start">开始日期</label>
+          <input type="date" id="project-start" />
+        </div>
+        <div class="form-group">
+          <label for="project-end">结束日期</label>
+          <input type="date" id="project-end" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="project-desc">项目描述</label>
+        <textarea id="project-desc" rows="3" placeholder="简单描述一下这次旅行..."></textarea>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="button button-ghost" id="cancel-btn">取消</button>
+        <button type="submit" class="button button-ink">创建项目</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module">
+    // API 基础地址
+    const API_BASE = window.location.origin;
+    
+    // 检查认证状态
+    async function checkAuth() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/auth/status`, {
+          credentials: 'include'
+        });
+        const data = await resp.json();
+        
+        if (!data.authenticated) {
+          window.location.href = 'login.html';
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = 'login.html';
+      }
+    }
+    
+    // 加载项目列表
+    async function loadProjects() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/projects`, {
+          credentials: 'include'
+        });
+        
+        if (resp.status === 401) {
+          window.location.href = 'login.html';
+          return;
+        }
+        
+        const projects = await resp.json();
+        renderProjects(projects);
+      } catch (error) {
+        console.error('Load projects failed:', error);
+        projectsContainer.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
+      }
+    }
+    
+    // 创建项目
+    async function createProject(projectData) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/projects`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify(projectData)
+        });
+        
+        if (resp.status === 401) {
+          window.location.href = 'login.html';
+          return;
+        }
+        
+        const project = await resp.json();
+        return project;
+      } catch (error) {
+        console.error('Create project failed:', error);
+        alert('创建失败，请重试');
+      }
+    }
+    
+    checkAuth();
+    loadProjects();
+    
+    const projectsContainer = document.getElementById('projects-container');
+    const createDialog = document.getElementById('create-dialog');
+    const createForm = document.getElementById('create-form');
+    
+    function renderProjects(projects) {
+      if (projects.length === 0) {
+        projectsContainer.innerHTML = `
+          <div class="empty-state">
+            <h2>还没有旅行项目</h2>
+            <p>创建你的第一个旅行项目，开始规划精彩旅程</p>
+            <button class="button button-ink" onclick="document.getElementById('create-dialog').showModal()">+ 新建项目</button>
+          </div>
+        `;
+        return;
+      }
+      
+      projectsContainer.innerHTML = `
+        <div class="project-grid">
+          ${projects.map(p => `
+            <div class="project-card" data-id="${p.id}">
+              <h3>${escapeHtml(p.name)}</h3>
+              <div class="project-meta">
+                ${p.destination ? `<span>📍 ${escapeHtml(p.destination)}</span>` : ''}
+                ${p.startDate ? `<span>📅 ${p.startDate} ~ ${p.endDate || '...'}</span>` : ''}
+              </div>
+              ${p.description ? `<div class="project-desc">${escapeHtml(p.description)}</div>` : ''}
+              <div class="project-stats">
+                <div class="stat">
+                  <span class="stat-value">${p.data?.blocks?.length || 0}</span>
+                  <span>旅行块</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value">${p.members?.length || 0}</span>
+                  <span>成员</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-value">${p.data?.timeline?.length || 0}</span>
+                  <span>行程项</span>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      
+      document.querySelectorAll('.project-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const projectId = card.dataset.id;
+          localStorage.setItem('currentProjectId', projectId);
+          window.location.href = 'index.html';
+        });
+      });
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    document.getElementById('create-btn').addEventListener('click', () => {
+      createDialog.showModal();
+    });
+    
+    document.getElementById('cancel-btn').addEventListener('click', () => {
+      createDialog.close();
+    });
+    
+    createForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const project = await createProject({
+        name: document.getElementById('project-name').value.trim(),
+        destination: document.getElementById('project-destination').value.trim(),
+        startDate: document.getElementById('project-start').value,
+        endDate: document.getElementById('project-end').value,
+        description: document.getElementById('project-desc').value.trim()
+      });
+      
+      if (project) {
+        createDialog.close();
+        createForm.reset();
+        loadProjects();
+      }
+    });
+  </script>
+</body>
+</html>

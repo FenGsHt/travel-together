@@ -1,0 +1,16 @@
+[Unit]
+Description=Travel Together Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=www
+WorkingDirectory=/opt/1panel/www/sites/travel-together/backend
+Environment="PATH=/usr/bin:/usr/local/bin"
+EnvironmentFile=/opt/1panel/www/sites/travel-together/backend/.env
+ExecStart=/usr/bin/python3 /opt/1panel/www/sites/travel-together/backend/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

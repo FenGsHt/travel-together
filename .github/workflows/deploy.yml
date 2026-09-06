@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Deploy via SSH
+      - name: Deploy Frontend
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -26,3 +26,24 @@ jobs:
           source: "*.html,app.js,src/*,styles.css,diannan-images/*"
           target: "/opt/1panel/www/sites/travel-together/index"
           strip_components: 0
+
+      - name: Deploy Backend
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "backend/*"
+          target: "/opt/1panel/www/sites/travel-together/backend"
+          strip_components: 1
+
+      - name: Install Backend Dependencies
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/1panel/www/sites/travel-together/backend
+            python3 -m pip install --user -r requirements.txt
+            sudo systemctl restart travel-together-backend || sudo systemctl start travel-together-backend

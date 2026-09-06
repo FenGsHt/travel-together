@@ -1,5 +1,33 @@
 import { createTripStore } from './src/trip-store.mjs';
 import { travelBlocks } from './src/travel-blocks.mjs';
+import { projectStore } from './src/project-store.mjs';
+
+// 获取当前项目
+const currentProjectId = localStorage.getItem('currentProjectId');
+const currentProject = projectStore.getProject(currentProjectId);
+
+if (!currentProject) {
+  window.location.href = 'projects.html';
+}
+
+// 更新页面标题和项目名称显示
+document.title = `${currentProject.name} · 协作行程`;
+const projectNameEl = document.querySelector('.trip-switcher strong');
+if (projectNameEl) {
+  projectNameEl.textContent = currentProject.name;
+}
+
+// 添加返回按钮
+const topbar = document.querySelector('.topbar');
+const backBtn = document.createElement('button');
+backBtn.className = 'button button-ghost';
+backBtn.textContent = '← 返回项目列表';
+backBtn.style.marginRight = '12px';
+backBtn.addEventListener('click', () => {
+  localStorage.removeItem('currentProjectId');
+  window.location.href = 'projects.html';
+});
+topbar.insertBefore(backBtn, topbar.firstChild.nextSibling);
 
 const days = [
   { id: 1, label: '10.01', title: '建水 · 古城慢游' },
@@ -11,25 +39,69 @@ const days = [
 
 const editor = { id: 'feng', name: 'feng' };
 const store = createTripStore();
-const storeIds = new Map();
-const timeline = document.querySelector('#timeline');
-const library = document.querySelector('#block-library');
-const activityList = document.querySelector('#activity-list');
-const aiSourceInput = document.querySelector('#ai-source');
-const aiDrafts = document.querySelector('#ai-drafts');
-let draggedBlockId = null;
 
-for (const block of travelBlocks) {
-  const created = store.createTravelBlock(block);
-  storeIds.set(block.id, created.id);
+// 从项目数据恢复
+if (currentProject.data && currentProject.data.blocks) {
+  const { blocks, timeline, polls, aiDrafts, activity } = currentProject.data;
+  
+  // 恢复旅行块
+  blocks.forEach(block => {
+    store.createTravelBlock(block);
+  });
+  
+  // 恢复时间线
+  timeline.forEach(item => {
+    const block = store.snapshot().blocks.find(b => b.name === item.name);
+    if (block) {
+      store.scheduleBlock({ 
+        blockId: block.id, 
+        day: item.day, 
+        time: item.time, 
+        editor: item.editor || editor 
+      });
+    }
+  });
+  
+  // 恢复投票
+  polls.forEach(poll => {
+    const timelineItem = store.snapshot().timeline.find(t => t.name === poll.timelineItemName);
+    if (timelineItem) {
+      const createdPoll = store.createPoll({ 
+        question: poll.question, 
+        timelineItemId: timelineItem.id, 
+        creator: poll.creator 
+      });
+      // 恢复投票
+      Object.entries(poll.votes).forEach(([voterId, choice]) => {
+        store.vote({ pollId: createdPoll.id, voter: { id: voterId, name: voterId }, choice });
+      });
+    }
+  });
+  
+  // 恢复 AI 草案
+  aiDrafts.forEach(draft => {
+    store.createAiDraft(draft);
+  });
+} else {
+  // 初始化默认数据（仅首次）
+  const storeIds = new Map();
+  for (const block of travelBlocks) {
+    const created = store.createTravelBlock(block);
+    storeIds.set(block.id, created.id);
+  }
+
+  function initialBlock(sourceId, day, time) {
+    store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
+  }
+  initialBlock('jianshui', 1, '10:30');
+  initialBlock('barbecue', 1, '19:00');
+  initialBlock('duoyi-tree', 3, '06:10');
 }
 
-function initialBlock(sourceId, day, time) {
-  store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
+function saveProjectData() {
+  const snapshot = store.snapshot();
+  projectStore.updateProjectData(currentProjectId, snapshot);
 }
-initialBlock('jianshui', 1, '10:30');
-initialBlock('barbecue', 1, '19:00');
-initialBlock('duoyi-tree', 3, '06:10');
 
 function timelineItemsFor(day) {
   return store.snapshot().timeline
@@ -233,6 +305,7 @@ function render() {
   renderTimeline();
   renderActivity();
   renderAiDrafts();
+  saveProjectData(); // 每次渲染后自动保存
 }
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));

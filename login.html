@@ -146,34 +146,63 @@
         </div>
     </div>
 
-    <script>
-        // 访问密钥（前端验证，生产环境应在后端验证）
-        const CORRECT_KEY = 'fengshtindeed';
+    <script type="module">
+        // API 基础地址
+        const API_BASE = window.location.origin;
         
-        // 检查是否已登录
-        if (localStorage.getItem('authenticated') === 'true') {
-            window.location.href = 'projects.html';
+        // 检查认证状态
+        async function checkAuth() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/auth/status`, {
+                    credentials: 'include'
+                });
+                const data = await resp.json();
+                
+                if (data.authenticated) {
+                    window.location.href = 'projects.html';
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
         }
         
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        checkAuth();
+        
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const input = document.getElementById('accessKey');
             const errorMessage = document.getElementById('errorMessage');
-            const key = input.value.trim();
+            const token = input.value.trim();
             
-            if (key === CORRECT_KEY) {
-                localStorage.setItem('authenticated', 'true');
-                window.location.href = 'projects.html';
-            } else {
-                input.classList.add('error');
-                errorMessage.classList.add('show');
-                input.value = '';
+            try {
+                const resp = await fetch(`${API_BASE}/api/auth/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ token })
+                });
                 
-                setTimeout(() => {
-                    input.classList.remove('error');
-                    errorMessage.classList.remove('show');
-                }, 3000);
+                const data = await resp.json();
+                
+                if (data.success) {
+                    window.location.href = 'projects.html';
+                } else {
+                    input.classList.add('error');
+                    errorMessage.classList.add('show');
+                    input.value = '';
+                    
+                    setTimeout(() => {
+                        input.classList.remove('error');
+                        errorMessage.classList.remove('show');
+                    }, 3000);
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+                errorMessage.textContent = '登录失败，请重试';
+                errorMessage.classList.add('show');
             }
         });
     </script>
