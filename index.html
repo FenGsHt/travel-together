@@ -1,890 +1,129 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>滇南旅游攻略 - 完整指南</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f5f5f5;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 20px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        header p {
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
-
-        #map {
-            height: 600px;
-            width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .section {
-            background: white;
-            padding: 30px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .section h2 {
-            color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.8em;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .section h3 {
-            color: #764ba2;
-            margin-top: 25px;
-            margin-bottom: 15px;
-            font-size: 1.4em;
-        }
-
-        .destination-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .destination-card {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-
-        .destination-card h4 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }
-
-        .distance-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        .distance-table th,
-        .distance-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .distance-table th {
-            background: #667eea;
-            color: white;
-        }
-
-        .distance-table tr:hover {
-            background: #f8f9fa;
-        }
-
-        .route-card {
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #667eea;
-        }
-
-        .route-card h4 {
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-
-        .route-steps {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-            margin-top: 10px;
-        }
-
-        .route-step {
-            background: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 500;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .route-arrow {
-            color: #667eea;
-            font-size: 1.5em;
-            font-weight: bold;
-        }
-
-        ul {
-            margin-left: 20px;
-            margin-top: 10px;
-        }
-
-        li {
-            margin-bottom: 8px;
-        }
-
-        .highlight {
-            background: #fff3cd;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-
-        .food-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .food-item {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 3px solid #28a745;
-        }
-
-        .budget-card {
-            background: linear-gradient(135deg, #28a74515 0%, #20c99715 100%);
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border-left: 4px solid #28a745;
-        }
-
-        .warning {
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-        }
-
-        .rating {
-            color: #ffc107;
-            font-size: 1.2em;
-        }
-
-        footer {
-            text-align: center;
-            padding: 30px;
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 1.8em;
-            }
-
-            #map {
-                height: 400px;
-            }
-
-            .route-steps {
-                flex-direction: column;
-            }
-
-            .route-arrow {
-                transform: rotate(90deg);
-            }
-        }
-
-        /* 自定义地图标记样式 */
-        .custom-marker {
-            transition: transform 0.2s;
-        }
-
-        .custom-marker:hover {
-            transform: scale(1.1);
-            z-index: 1000;
-        }
-
-        /* 自定义提示框样式 */
-        .custom-tooltip {
-            background: white !important;
-            border: 2px solid #667eea !important;
-            border-radius: 10px !important;
-            padding: 15px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-            max-width: 280px !important;
-        }
-
-        .custom-tooltip::before {
-            border-top-color: #667eea !important;
-        }
-
-        .leaflet-tooltip-top::before {
-            border-top-color: #667eea !important;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1e8" />
+  <title>一起去滇南 · 协作行程</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <header>
-        <h1>🌿 滇南旅游攻略</h1>
-        <p>基于50篇小红书笔记的完整指南</p>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="一起去滇南首页">
+        <span class="brand-mark">南</span>
+        <span>一起去滇南</span>
+      </a>
+      <div class="trip-switcher">
+        <span class="eyebrow">正在共创</span>
+        <strong>国庆 · 滇南 7 日</strong>
+        <span class="trip-date">10.01 — 10.07</span>
+      </div>
+      <div class="top-actions">
+        <div class="presence" aria-label="当前协作成员">
+          <span class="avatar avatar-feng">F</span>
+          <span class="avatar avatar-lin">林</span>
+          <span class="avatar avatar-an">安</span>
+          <span class="member-count">3 人协作中</span>
+        </div>
+        <button class="button button-ghost" id="invite-button">邀请成员</button>
+        <button class="button button-ink" id="share-button">分享行程</button>
+      </div>
     </header>
 
-    <div class="container">
-        <!-- 地图部分 -->
-        <div class="section">
-            <h2>🗺️ 滇南景点地图</h2>
-            <div id="map"></div>
+    <main class="workspace">
+      <aside class="sidebar" aria-label="项目导航">
+        <div class="project-card">
+          <p class="eyebrow">旅行项目</p>
+          <h1>在红河与山雾之间</h1>
+          <p>5 天 · 4 座城 · 慢一点也没关系</p>
+          <div class="progress"><span></span></div>
+          <small>6 / 11 个决定已确认</small>
         </div>
 
-        <!-- 距离表 -->
-        <div class="section">
-            <h2>📏 景点间距离参考</h2>
-            <table class="distance-table">
-                <thead>
-                    <tr>
-                        <th>起点</th>
-                        <th>终点</th>
-                        <th>距离</th>
-                        <th>自驾时间</th>
-                        <th>交通方式</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>昆明</td>
-                        <td>建水</td>
-                        <td>220km</td>
-                        <td>3小时</td>
-                        <td>自驾/动车(2h)</td>
-                    </tr>
-                    <tr>
-                        <td>建水</td>
-                        <td>元阳</td>
-                        <td>90km</td>
-                        <td>2.5小时</td>
-                        <td>自驾/包车</td>
-                    </tr>
-                    <tr>
-                        <td>元阳</td>
-                        <td>蒙自</td>
-                        <td>150km</td>
-                        <td>3小时</td>
-                        <td>自驾/包车</td>
-                    </tr>
-                    <tr>
-                        <td>蒙自</td>
-                        <td>普者黑</td>
-                        <td>180km</td>
-                        <td>3.5小时</td>
-                        <td>自驾/包车</td>
-                    </tr>
-                    <tr>
-                        <td>普者黑</td>
-                        <td>昆明</td>
-                        <td>290km</td>
-                        <td>4小时</td>
-                        <td>自驾/动车</td>
-                    </tr>
-                    <tr>
-                        <td>昆明</td>
-                        <td>弥勒</td>
-                        <td>140km</td>
-                        <td>2小时</td>
-                        <td>自驾/动车</td>
-                    </tr>
-                    <tr>
-                        <td>弥勒</td>
-                        <td>蒙自</td>
-                        <td>130km</td>
-                        <td>2小时</td>
-                        <td>自驾/动车</td>
-                    </tr>
-                    <tr>
-                        <td>昆明</td>
-                        <td>普洱</td>
-                        <td>400km</td>
-                        <td>5小时</td>
-                        <td>自驾/动车</td>
-                    </tr>
-                    <tr>
-                        <td>普洱</td>
-                        <td>景迈山</td>
-                        <td>170km</td>
-                        <td>3.5小时</td>
-                        <td>自驾/包车</td>
-                    </tr>
-                    <tr>
-                        <td>普洱</td>
-                        <td>西双版纳</td>
-                        <td>120km</td>
-                        <td>2小时</td>
-                        <td>自驾/大巴</td>
-                    </tr>
-                </tbody>
-            </table>
+        <nav class="nav-list" aria-label="工作区">
+          <a class="nav-item active" href="#itinerary"><span>行程</span><b>05</b></a>
+          <a class="nav-item" href="#explore"><span>灵感库</span><b>08</b></a>
+          <a class="nav-item" href="#decisions"><span>待决策</span><b>03</b></a>
+          <a class="nav-item" href="guide.html"><span>完整攻略</span><b>↗</b></a>
+        </nav>
+
+        <section class="day-nav" aria-label="行程天数">
+          <p class="eyebrow">行程树</p>
+          <button class="day-nav-item selected" data-day-link="1"><span>01</span><em>建水</em><i>2 项</i></button>
+          <button class="day-nav-item" data-day-link="2"><span>02</span><em>建水 → 元阳</em><i>0 项</i></button>
+          <button class="day-nav-item" data-day-link="3"><span>03</span><em>元阳</em><i>1 项</i></button>
+          <button class="day-nav-item" data-day-link="4"><span>04</span><em>蒙自</em><i>0 项</i></button>
+          <button class="day-nav-item" data-day-link="5"><span>05</span><em>普者黑</em><i>0 项</i></button>
+        </section>
+
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          自动保存 · 刚刚
         </div>
+      </aside>
 
-        <!-- 经典路线 -->
-        <div class="section">
-            <h2>🗺️ 经典路线推荐</h2>
-
-            <div class="route-card">
-                <h4>路线一：滇南小环线（5-7天）⭐⭐⭐⭐⭐</h4>
-                <div class="route-steps">
-                    <span class="route-step">昆明</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">建水(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">元阳(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">蒙自(1天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">普者黑(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">昆明</span>
-                </div>
-                <p style="margin-top: 15px;"><strong>适合人群：</strong>首次来滇南，时间适中的游客</p>
-            </div>
-
-            <div class="route-card">
-                <h4>路线二：滇南深度游（10-12天）⭐⭐⭐⭐⭐</h4>
-                <div class="route-steps">
-                    <span class="route-step">昆明</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">建水(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">元阳(3天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">绿春/坝美(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">蒙自(1天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">普者黑(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">弥勒(1天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">昆明</span>
-                </div>
-                <p style="margin-top: 15px;"><strong>适合人群：</strong>深度游爱好者，时间充裕</p>
-            </div>
-
-            <div class="route-card">
-                <h4>路线三：滇南+普洱版纳（12天）⭐⭐⭐⭐</h4>
-                <div class="route-steps">
-                    <span class="route-step">昆明</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">建水(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">普洱(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">景迈山(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">西双版纳(3天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">哀牢山(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">昆明</span>
-                </div>
-                <p style="margin-top: 15px;"><strong>适合人群：</strong>想同时体验滇南和热带风情</p>
-            </div>
-
-            <div class="route-card">
-                <h4>路线四：滇东南动车游（5天）⭐⭐⭐⭐</h4>
-                <div class="route-steps">
-                    <span class="route-step">昆明</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">弥勒(1天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">蒙自(1天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">建水(2天)</span>
-                    <span class="route-arrow">→</span>
-                    <span class="route-step">昆明</span>
-                </div>
-                <p style="margin-top: 15px;"><strong>适合人群：</strong>不想长途自驾，预算有限</p>
-                <p><strong>费用参考：</strong>人均1500元（动车+滴滴+住宿）</p>
-            </div>
+      <section class="itinerary" id="itinerary" aria-labelledby="itinerary-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">共同编辑的时间树</p>
+            <h2 id="itinerary-title">把想去的地方拖进每一天</h2>
+          </div>
+          <div class="view-switch" aria-label="行程视图">
+            <button class="active">时间线</button><button>地图</button>
+          </div>
         </div>
+        <p class="helper">从右侧拖动旅行块到日期栏。落下后可直接修改时间和备注；同行人的调整会显示在活动记录中。</p>
+        <div class="timeline" id="timeline"></div>
+      </section>
 
-        <!-- 核心目的地 -->
-        <div class="section">
-            <h2>🏞️ 核心目的地详解</h2>
+      <aside class="inspector" aria-label="灵感与协作状态">
+        <section id="explore" class="explore-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">灵感库</p><h2>旅行块</h2></div>
+            <button class="icon-button" id="add-block" aria-label="添加旅行块">＋</button>
+          </div>
+          <label class="search"><span>⌕</span><input id="search-blocks" placeholder="搜索景点 / 美食" /></label>
+          <p class="drag-tip">拖动名称和图片组成的旅行块，排进你的时间树。</p>
+          <div class="block-library" id="block-library"></div>
+        </section>
 
-            <div class="destination-grid">
-                <div class="destination-card">
-                    <img src="diannan-images/spots/建水古城.jpg" alt="建水古城" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">
-                    <h4>建水古城 <span class="rating">⭐⭐⭐⭐⭐</span></h4>
-                    <p><strong>印象：</strong>千年古城，没有丽江的商业化，本地人还在里面生活</p>
-                    <p><strong>必游景点：</strong></p>
-                    <ul>
-                        <li>朱家花园：清代富商宅院</li>
-                        <li>建水文庙：千年文庙</li>
-                        <li>双龙桥：十七孔桥</li>
-                        <li>团山民居：百年古村落</li>
-                        <li>乡会桥车站：米轨小火车</li>
-                        <li>大板井：建水豆腐发源地</li>
-                    </ul>
-                    <p><strong>建议停留：</strong>2天</p>
-                    <p><strong>费用：</strong>2天人均200元（不含交通）</p>
-                    <p><strong>交通：</strong>昆明动车2小时直达</p>
-                </div>
+        <section id="decisions" class="decision-panel">
+          <div class="panel-heading"><div><p class="eyebrow">下一步</p><h2>待确认</h2></div><span class="count-badge">3</span></div>
+          <article class="decision-item">
+            <span class="decision-state">投票中</span>
+            <h3>元阳住山上还是新县城？</h3>
+            <p>小林倾向山上，方便第二天看日出。</p>
+            <div class="vote-row"><button>山上 <b>2</b></button><button>新县城 <b>1</b></button></div>
+          </article>
+        </section>
 
-                <div class="destination-card">
-                    <img src="diannan-images/spots/元阳梯田.jpg" alt="元阳梯田" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">
-                    <h4>元阳梯田 <span class="rating">⭐⭐⭐⭐⭐</span></h4>
-                    <p><strong>核心景点：</strong></p>
-                    <ul>
-                        <li>🌅 多依树：日出最佳观赏点</li>
-                        <li>🌄 坝达：日落最佳观赏点</li>
-                        <li>🐯 老虎嘴：壮观梯田景观</li>
-                    </ul>
-                    <p><strong>最佳时间：</strong>11月-次年4月（灌水期）</p>
-                    <p><strong>建议停留：</strong>2-3天</p>
-                    <div class="warning">
-                        <strong>注意：</strong>看日出需早起（6点左右），光线对景色影响大，需好天气
-                    </div>
-                </div>
+        <section class="activity-panel">
+          <div class="panel-heading"><div><p class="eyebrow">实时协作</p><h2>刚刚发生</h2></div></div>
+          <ol class="activity-list" id="activity-list"></ol>
+        </section>
+      </aside>
+    </main>
+  </div>
 
-                <div class="destination-card">
-                    <img src="diannan-images/spots/蒙自碧色寨.jpg" alt="蒙自碧色寨" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">
-                    <h4>蒙自 <span class="rating">⭐⭐⭐⭐</span></h4>
-                    <p><strong>印象：</strong>滇南慢城天花板，过桥米线发源地，《芳华》取景地</p>
-                    <p><strong>City Walk路线：</strong></p>
-                    <ul>
-                        <li>南湖公园 → 蒙自大清邮政总局</li>
-                        <li>→ 法国花园 → 西南联大纪念馆</li>
-                        <li>→ 大树寨夜市</li>
-                    </ul>
-                    <p><strong>必游景点：</strong></p>
-                    <ul>
-                        <li>碧色寨：《芳华》取景地，门票80元</li>
-                        <li>南湖公园：城市绿肺</li>
-                        <li>大树寨夜市：周日限定</li>
-                    </ul>
-                    <p><strong>最佳时间：</strong>3-5月、9-11月</p>
-                    <p><strong>建议停留：</strong>1天</p>
-                </div>
+  <dialog id="invite-dialog">
+    <button class="dialog-close" aria-label="关闭">×</button>
+    <p class="eyebrow">邀请同行人</p>
+    <h2>把这个行程交给大家一起决定</h2>
+    <p>链接有效期 7 天。加入者默认可以评论、投票和添加旅行块。</p>
+    <div class="invite-link"><code>travel-together/diannan-oct</code><button id="copy-invite">复制</button></div>
+  </dialog>
 
-                <div class="destination-card">
-                    <img src="diannan-images/spots/普者黑.jpg" alt="普者黑" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">
-                    <h4>普者黑 <span class="rating">⭐⭐⭐⭐</span></h4>
-                    <p><strong>特色：</strong></p>
-                    <ul>
-                        <li>喀斯特地貌，山水田园风光</li>
-                        <li>划船游湖，荷花季节最美</li>
-                        <li>《爸爸去哪儿》取景地</li>
-                    </ul>
-                    <p><strong>最佳时间：</strong>7-8月（荷花季）</p>
-                    <p><strong>建议停留：</strong>2天</p>
-                </div>
+  <template id="timeline-day-template">
+    <article class="day-column">
+      <header><span class="day-number"></span><div><p class="eyebrow"></p><h3></h3></div><button class="add-slot" title="添加空白时间">＋</button></header>
+      <div class="drop-zone" tabindex="0"><span class="drop-hint">拖到这里</span><div class="timeline-items"></div></div>
+    </article>
+  </template>
 
-                <div class="destination-card">
-                    <img src="diannan-images/spots/景迈山.jpg" alt="景迈山" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;">
-                    <h4>景迈山 <span class="rating">⭐⭐⭐⭐</span></h4>
-                    <p><strong>特色体验：</strong></p>
-                    <ul>
-                        <li>逛寨子、喝茶、看日出云海</li>
-                        <li>糯干古寨（淳朴干净）</li>
-                        <li>翁基古寨（商业气息足）</li>
-                        <li>采茶体验：220元/4人</li>
-                    </ul>
-                    <p><strong>建议停留：</strong>2天</p>
-                    <div class="warning">
-                        <strong>注意：</strong>山路较多，291公里开7小时，石子路多，提前预定住宿
-                    </div>
-                </div>
-
-                <div class="destination-card">
-                    <h4>弥勒 <span class="rating">⭐⭐⭐⭐</span></h4>
-                    <p><strong>特色：</strong></p>
-                    <ul>
-                        <li>东风韵：红砖建筑，门票80元</li>
-                        <li>温泉：亚朵酒店含温泉</li>
-                        <li>美食：卤鸡米线、夜市烤猪蹄</li>
-                    </ul>
-                    <p><strong>建议停留：</strong>1天</p>
-                    <p><strong>交通：</strong>昆明动车可达</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 美食推荐 -->
-        <div class="section">
-            <h2>🍜 美食地图</h2>
-
-            <h3>建水美食</h3>
-            <div class="food-list">
-                <div class="food-item">
-                    <img src="diannan-images/food/建水烧烤.jpg" alt="建水烧烤" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🍢 建水烧烤</strong>
-                    <p>牛肉小串蘸干碟封神</p>
-                </div>
-                <div class="food-item">
-                    <img src="diannan-images/food/建水烤豆腐.jpg" alt="建水烤豆腐" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🫘 建水烤豆腐</strong>
-                    <p>围炉坐着吃，老板丢玉米粒计数</p>
-                </div>
-                <div class="food-item">
-                    <img src="diannan-images/food/草芽米线.jpg" alt="草芽米线" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🍜 草芽米线</strong>
-                    <p>建水限定，清甜脆嫩</p>
-                </div>
-                <div class="food-item">
-                    <strong>🥣 板井豆腐</strong>
-                    <p>5元豆花随便吃</p>
-                </div>
-            </div>
-
-            <h3>蒙自美食</h3>
-            <div class="food-list">
-                <div class="food-item">
-                    <img src="diannan-images/food/过桥米线.jpg" alt="过桥米线" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🍜 过桥米线</strong>
-                    <p>蒙自发源地，吴记榴乡推荐</p>
-                </div>
-                <div class="food-item">
-                    <img src="diannan-images/food/越南小卷粉.jpg" alt="越南小卷粉" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🥟 越南小卷粉</strong>
-                    <p>地道小吃</p>
-                </div>
-                <div class="food-item">
-                    <img src="diannan-images/food/哈尼蘸水鸡.jpg" alt="哈尼蘸水鸡" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>🍗 哈尼蘸水鸡</strong>
-                    <p>特色菜</p>
-                </div>
-                <div class="food-item">
-                    <strong>🌙 大树寨夜市</strong>
-                    <p>周日限定，烟火气天花板</p>
-                </div>
-            </div>
-
-            <h3>其他地区</h3>
-            <div class="food-list">
-                <div class="food-item">
-                    <strong>🐟 铜锅鱼+洋芋饭</strong>
-                    <p>抚仙湖特色</p>
-                </div>
-                <div class="food-item">
-                    <strong>🥩 铜瓢牛肉火锅</strong>
-                    <p>腾冲特色</p>
-                </div>
-                <div class="food-item">
-                    <strong>☕ 普洱茶</strong>
-                    <p>普洱特产</p>
-                </div>
-                <div class="food-item">
-                    <strong>🥭 孟连牛油果</strong>
-                    <p>咖啡+牛油果爱好者小城</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 费用预算 -->
-        <div class="section">
-            <h2>💰 费用预算</h2>
-
-            <div class="budget-card">
-                <h4>🎒 经济型（5天）</h4>
-                <p><strong>人均：</strong>1500-2000元</p>
-                <p><strong>包含：</strong>动车+经济酒店+当地交通+餐饮</p>
-                <p><strong>示例：</strong>红河州5天4晚动车游，人均1500元</p>
-            </div>
-
-            <div class="budget-card">
-                <h4>🚗 舒适型（7天）</h4>
-                <p><strong>人均：</strong>3000-4000元</p>
-                <p><strong>包含：</strong>自驾租车+中档酒店/民宿+餐饮+门票</p>
-            </div>
-
-            <div class="budget-card">
-                <h4>🌟 深度游（10-12天）</h4>
-                <p><strong>人均：</strong>4000-6000元</p>
-                <p><strong>包含：</strong>全程自驾+特色民宿+体验项目</p>
-            </div>
-
-            <h3>主要花费参考</h3>
-            <table class="distance-table">
-                <tr>
-                    <th>项目</th>
-                    <th>费用</th>
-                </tr>
-                <tr>
-                    <td>自驾租车</td>
-                    <td>200-300元/天</td>
-                </tr>
-                <tr>
-                    <td>普通酒店</td>
-                    <td>150-300元/晚</td>
-                </tr>
-                <tr>
-                    <td>特色民宿</td>
-                    <td>200-500元/晚</td>
-                </tr>
-                <tr>
-                    <td>餐饮</td>
-                    <td>人均50-100元/天</td>
-                </tr>
-                <tr>
-                    <td>碧色寨门票</td>
-                    <td>80元</td>
-                </tr>
-                <tr>
-                    <td>东风韵门票</td>
-                    <td>80元</td>
-                </tr>
-            </table>
-        </div>
-
-        <!-- 交通方式 -->
-        <div class="section">
-            <h2>🚗 交通方式</h2>
-
-            <h3>自驾（推荐）⭐⭐⭐⭐⭐</h3>
-            <p><strong>优点：</strong>自由度高，沿途风光美</p>
-            <p><strong>昆明租车：</strong>机场取车，方便</p>
-            <div class="warning">
-                <strong>注意事项：</strong>
-                <ul>
-                    <li>景迈山、元阳山路较多</li>
-                    <li>景迈山石子路多，291公里开7小时</li>
-                    <li>腾冲方向S弯道多，367公里开7小时</li>
-                    <li>部分国道风景美但路况复杂</li>
-                </ul>
-            </div>
-
-            <h3>动车+包车 ⭐⭐⭐⭐</h3>
-            <p><strong>动车线路：</strong></p>
-            <ul>
-                <li>昆明→建水：2小时</li>
-                <li>昆明→弥勒/蒙自：动车可达</li>
-            </ul>
-            <p><strong>当地交通：</strong>滴滴/包车</p>
-            <p><strong>适合人群：</strong>不想长途自驾的游客</p>
-        </div>
-
-        <!-- 注意事项 -->
-        <div class="section">
-            <h2>⚠️ 重要提示</h2>
-
-            <h3>🗓️ 最佳季节</h3>
-            <ul>
-                <li><strong>元阳梯田：</strong>11月-次年4月（灌水期）</li>
-                <li><strong>普者黑：</strong>7-8月（荷花季）</li>
-                <li><strong>蒙自：</strong>3-5月、9-11月</li>
-                <li><strong>整体：</strong>避开国庆、春节等高峰期</li>
-            </ul>
-
-            <h3>📸 拍照提示</h3>
-            <ul>
-                <li>碧色寨、元阳梯田等需要好天气</li>
-                <li>碧色寨红砖建筑需蓝天才好看</li>
-                <li>下午去注意太阳落山时间</li>
-            </ul>
-
-            <h3>🏨 住宿预定</h3>
-            <ul>
-                <li>旺季提前预定（特别是景迈山）</li>
-                <li>热门民宿容易满房</li>
-            </ul>
-
-            <h3>🚗 自驾注意</h3>
-            <ul>
-                <li>预留充足时间（实际车程比导航长）</li>
-                <li>山路弯道多，注意安全</li>
-                <li>部分路段路况较差</li>
-            </ul>
-
-            <div class="warning">
-                <strong>关于西双版纳：</strong>评价两极分化，旅拍人多，商业化严重。如果追求安静，可跳过。
-            </div>
-        </div>
-
-        <!-- 推荐人群 -->
-        <div class="section">
-            <h2>🎯 推荐人群</h2>
-            <ul>
-                <li>✅ <strong>历史文化爱好者：</strong>建水古城、蒙自西南联大旧址</li>
-                <li>✅ <strong>摄影爱好者：</strong>元阳梯田、建水古建</li>
-                <li>✅ <strong>美食爱好者：</strong>建水烧烤、蒙自过桥米线</li>
-                <li>✅ <strong>慢生活追求者：</strong>蒙自citywalk、景迈山喝茶</li>
-                <li>✅ <strong>避开人潮：</strong>滇南比大理丽江人少很多</li>
-                <li>✅ <strong>自驾爱好者：</strong>沿途风光美，路线灵活</li>
-            </ul>
-        </div>
-    </div>
-
-    <footer>
-        <p>基于50篇小红书笔记整理 | 仅供参考，实际信息请以当地为准</p>
-        <p>最后更新：2026年9月</p>
-    </footer>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        // 初始化地图
-        const map = L.map('map').setView([23.5, 102.5], 8);
-
-        // 添加地图图层
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // 景点坐标和信息
-        const destinations = [
-            { name: '昆明', lat: 25.0389, lng: 102.7183, color: 'red', image: '', links: [] },
-            { name: '建水古城', lat: 23.6245, lng: 102.8375, color: 'blue', image: 'diannan-images/spots/建水古城.jpg', links: ['https://www.xiaohongshu.com/search_result?keyword=建水古城'] },
-            { name: '元阳梯田', lat: 23.2167, lng: 102.7500, color: 'green', image: 'diannan-images/spots/元阳梯田.jpg', links: ['https://www.xiaohongshu.com/search_result?keyword=元阳梯田'] },
-            { name: '蒙自碧色寨', lat: 23.3667, lng: 103.3833, color: 'purple', image: 'diannan-images/spots/蒙自碧色寨.jpg', links: ['https://www.xiaohongshu.com/search_result?keyword=蒙自碧色寨'] },
-            { name: '普者黑', lat: 24.1167, lng: 104.0500, color: 'orange', image: 'diannan-images/spots/普者黑.jpg', links: ['https://www.xiaohongshu.com/search_result?keyword=普者黑'] },
-            { name: '弥勒', lat: 24.4000, lng: 103.4333, color: 'pink', image: '', links: [] },
-            { name: '普洱', lat: 22.7833, lng: 100.9667, color: 'brown', image: '', links: [] },
-            { name: '景迈山', lat: 22.2000, lng: 100.6500, color: 'darkgreen', image: 'diannan-images/spots/景迈山.jpg', links: ['https://www.xiaohongshu.com/search_result?keyword=景迈山'] },
-            { name: '西双版纳', lat: 22.0000, lng: 100.8000, color: 'darkred', image: '', links: [] }
-        ];
-
-        // 添加标记
-        const markers = {};
-        destinations.forEach(dest => {
-            const marker = L.marker([dest.lat, dest.lng], {
-                icon: L.divIcon({
-                    className: 'custom-marker',
-                    html: `<div style="background-color: ${dest.color}; padding: 5px 10px; border-radius: 20px; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 13px; white-space: nowrap;">${dest.name}</div>`,
-                    iconSize: [null, null],
-                    iconAnchor: [50, 20]
-                })
-            }).addTo(map);
-
-            // 创建悬浮提示内容
-            let tooltipContent = `<div style="max-width: 250px;">`;
-            tooltipContent += `<h3 style="margin: 0 0 10px 0; color: ${dest.color}; font-size: 16px;">${dest.name}</h3>`;
-
-            if (dest.image) {
-                tooltipContent += `<img src="${dest.image}" alt="${dest.name}" style="width: 100%; height: 150px; object-fit: cover; border-radius: 5px; margin-bottom: 10px;">`;
-            }
-
-            tooltipContent += `<div style="font-size: 12px; color: #666; margin-bottom: 10px;">坐标: ${dest.lat.toFixed(4)}, ${dest.lng.toFixed(4)}</div>`;
-
-            if (dest.links && dest.links.length > 0) {
-                tooltipContent += `<div style="border-top: 1px solid #ddd; padding-top: 10px; margin-top: 10px;">`;
-                tooltipContent += `<div style="font-weight: bold; margin-bottom: 5px; font-size: 12px;">📚 小红书攻略:</div>`;
-                dest.links.forEach(link => {
-                    const keyword = link.split('keyword=')[1];
-                    tooltipContent += `<a href="${link}" target="_blank" style="display: block; color: #ff2442; text-decoration: none; font-size: 12px; margin-bottom: 3px;">🔗 搜索"${decodeURIComponent(keyword)}"</a>`;
-                });
-                tooltipContent += `</div>`;
-            }
-
-            tooltipContent += `</div>`;
-
-            // 绑定悬浮提示
-            marker.bindTooltip(tooltipContent, {
-                permanent: false,
-                direction: 'top',
-                offset: [0, -20],
-                className: 'custom-tooltip'
-            });
-
-            markers[dest.name] = marker;
-        });
-
-        // 添加路线和标注
-        const routes = [
-            // 小环线
-            { from: '昆明', to: '建水古城', distance: '220km', driveTime: '3h', trainTime: '2h', color: '#667eea', dashArray: '5, 10' },
-            { from: '建水古城', to: '元阳梯田', distance: '90km', driveTime: '2.5h', trainTime: null, color: '#667eea', dashArray: '5, 10' },
-            { from: '元阳梯田', to: '蒙自碧色寨', distance: '150km', driveTime: '3h', trainTime: null, color: '#667eea', dashArray: '5, 10' },
-            { from: '蒙自碧色寨', to: '普者黑', distance: '180km', driveTime: '3.5h', trainTime: null, color: '#667eea', dashArray: '5, 10' },
-            { from: '普者黑', to: '昆明', distance: '290km', driveTime: '4h', trainTime: null, color: '#667eea', dashArray: '5, 10' },
-
-            // 其他路线
-            { from: '昆明', to: '弥勒', distance: '140km', driveTime: '2h', trainTime: '1.5h', color: '#764ba2', dashArray: '10, 10' },
-            { from: '弥勒', to: '蒙自碧色寨', distance: '130km', driveTime: '2h', trainTime: '1.5h', color: '#764ba2', dashArray: '10, 10' },
-            { from: '昆明', to: '普洱', distance: '400km', driveTime: '5h', trainTime: '3h', color: '#28a745', dashArray: '15, 10' },
-            { from: '普洱', to: '景迈山', distance: '170km', driveTime: '3.5h', trainTime: null, color: '#28a745', dashArray: '15, 10' },
-            { from: '普洱', to: '西双版纳', distance: '120km', driveTime: '2h', trainTime: null, color: '#28a745', dashArray: '15, 10' }
-        ];
-
-        routes.forEach(route => {
-            const fromMarker = markers[route.from];
-            const toMarker = markers[route.to];
-
-            if (fromMarker && toMarker) {
-                const fromLatLng = fromMarker.getLatLng();
-                const toLatLng = toMarker.getLatLng();
-
-                // 绘制路线
-                const line = L.polyline([
-                    [fromLatLng.lat, fromLatLng.lng],
-                    [toLatLng.lat, toLatLng.lng]
-                ], {
-                    color: route.color,
-                    weight: 3,
-                    opacity: 0.6,
-                    dashArray: route.dashArray
-                }).addTo(map);
-
-                // 计算中点位置用于标注
-                const midLat = (fromLatLng.lat + toLatLng.lat) / 2;
-                const midLng = (fromLatLng.lng + toLatLng.lng) / 2;
-
-                // 创建标注内容
-                let labelContent = `<div style="background: white; padding: 5px 8px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-size: 11px; white-space: nowrap; border-left: 3px solid ${route.color};">`;
-                labelContent += `<div style="font-weight: bold; color: ${route.color}; margin-bottom: 2px;">🚗 ${route.distance} ${route.driveTime}</div>`;
-                if (route.trainTime) {
-                    labelContent += `<div style="color: #666;">🚄 ${route.trainTime}</div>`;
-                }
-                labelContent += `</div>`;
-
-                // 添加标注
-                const labelIcon = L.divIcon({
-                    className: 'route-label',
-                    html: labelContent,
-                    iconSize: [120, 40],
-                    iconAnchor: [60, 20]
-                });
-
-                L.marker([midLat, midLng], {
-                    icon: labelIcon,
-                    interactive: false
-                }).addTo(map);
-            }
-        });
-
-        // 调整地图视图以显示所有标记
-        const group = new L.featureGroup(Object.values(markers));
-        map.fitBounds(group.getBounds().pad(0.1));
-    </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
