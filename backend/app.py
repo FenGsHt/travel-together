@@ -33,6 +33,9 @@ PROJECTS_FILE = DATA_DIR / "projects.json"
 # 访问令牌（从环境变量读取）
 SITE_ACCESS_TOKEN = os.getenv('SITE_ACCESS_TOKEN', '')
 
+# AI API Key（从环境变量读取）
+AI_API_KEY = os.getenv('AI_API_KEY', '')
+
 
 # ============== 认证 API ==============
 
@@ -125,6 +128,26 @@ def require_auth(f):
         
         if not authenticated:
             return jsonify({'error': '未授权'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
+
+def require_ai_auth(f):
+    """AI API 认证装饰器"""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not AI_API_KEY:
+            return jsonify({'error': 'AI API 未配置'}), 503
+        
+        # 从请求头获取 API Key
+        api_key = request.headers.get('X-API-Key', '')
+        
+        if not api_key or not hmac.compare_digest(api_key, AI_API_KEY):
+            return jsonify({'error': 'API Key 无效'}), 401
         
         return f(*args, **kwargs)
     
@@ -226,6 +249,153 @@ def delete_project(project_id):
     save_projects(projects)
     
     return jsonify({'success': True})
+
+
+# ============== AI API 接口 ==============
+
+@app.route('/api/ai/projects/<project_id>/blocks', methods=['POST'])
+@require_ai_auth
+def ai_import_blocks(project_id):
+    """AI 批量导入旅行块"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    data = request.get_json(silent=True) or {}
+    blocks = data.get('blocks', [])
+    
+    if not isinstance(blocks, list):
+        return jsonify({'error': 'blocks 必须是数组'}), 400
+    
+    # 为每个 block 生成 ID
+    for block in blocks:
+        if 'id' not in block:
+            block['id'] = f"block_{int(datetime.now().timestamp() * 1000)}_{len(project['data']['blocks'])}"
+        project['data']['blocks'].append(block)
+    
+    project['updatedAt'] = datetime.now().isoformat()
+    save_projects(projects)
+    
+    return jsonify({
+        'success': True,
+        'imported': len(blocks),
+        'blocks': project['data']['blocks']
+    })
+
+
+@app.route('/api/ai/projects/<project_id>/timeline', methods=['POST'])
+@require_ai_auth
+def ai_update_timeline(project_id):
+    """AI 添加/修改行程项"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    data = request.get_json(silent=True) or {}
+    action = data.get('action', 'add')  # add, update, remove
+    item = data.get('item', {})
+    
+    if action == 'add':
+        if 'id' not in item:
+            item['id'] = f"timeline_{int(datetime.now().timestamp() * 1000)}_{len(project['data']['timeline'])}"
+        project['data']['timeline'].append(item)
+        
+    elif action == 'update':
+        item_id = item.get('id')
+        if not item_id:
+            return jsonify({'error': '缺少 item.id'}), 400
+        
+        for i, t in enumerate(project['data']['timeline']):
+            if t['id'] == item_id:
+                project['data']['timeline'][i] = {**t, **item}
+                break
+        else:
+            return jsonify({'error': '行程项不存在'}), 404
+            
+    elif action == 'remove':
+        item_id = item.get('id')
+        if not item_id:
+            return jsonify({'error': '缺少 item.id'}), 400
+        
+        project['data']['timeline'] = [
+            t for t in project['data']['timeline'] if t['id'] != item_id
+        ]
+    else:
+        return jsonify({'error': '无效的 action'}), 400
+    
+    project['updatedAt'] = datetime.now().isoformat()
+    save_projects(projects)
+    
+    return jsonify({
+        'success': True,
+        'action': action,
+        'timeline': project['data']['timeline']
+    })
+
+
+@app.route('/api/ai/projects/<project_id>/polls', methods=['POST'])
+@require_ai_auth
+def ai_create_poll(project_id):
+    """AI 创建投票"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    data = request.get_json(silent=True) or {}
+    poll = {
+        'id': f"poll_{int(datetime.now().timestamp() * 1000)}_{len(project['data']['polls'])}",
+        'question': data.get('question', ''),
+        'options': data.get('options', []),
+        'votes': {},
+        'createdBy': 'ai',
+        'createdAt': datetime.now().isoformat()
+    }
+    
+    if not poll['question']:
+        return jsonify({'error': '缺少 question'}), 400
+    
+    project['data']['polls'].append(poll)
+    project['updatedAt'] = datetime.now().isoformat()
+    save_projects(projects)
+    
+    return jsonify({
+        'success': True,
+        'poll': poll
+    })
+
+
+@app.route('/api/ai/projects/<project_id>/summary', methods=['GET'])
+@require_ai_auth
+def ai_get_summary(project_id):
+    """获取项目摘要（供 AI 读取）"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    summary = {
+        'id': project['id'],
+        'name': project['name'],
+        'description': project.get('description', ''),
+        'destination': project.get('destination', ''),
+        'startDate': project.get('startDate', ''),
+        'endDate': project.get('endDate', ''),
+        'blocks_count': len(project['data']['blocks']),
+        'timeline_count': len(project['data']['timeline']),
+        'polls_count': len(project['data']['polls']),
+        'blocks': project['data']['blocks'],
+        'timeline': project['data']['timeline'],
+        'polls': project['data']['polls']
+    }
+    
+    return jsonify(summary)
 
 
 # ============== 健康检查 ==============
