@@ -1,10 +1,12 @@
 export function createTripStore() {
   let blockSequence = 0;
   let timelineSequence = 0;
+  let pollSequence = 0;
   const state = {
     blocks: [],
     timeline: [],
     aiDrafts: [],
+    polls: [],
     activity: [],
   };
 
@@ -113,6 +115,41 @@ export function createTripStore() {
       if (note !== undefined) item.note = note;
       record('timeline.edited', editor, { timelineId: item.id });
       return structuredClone(item);
+    },
+
+    createPoll({ question, timelineItemId, creator }) {
+      requireMember(creator);
+      const poll = {
+        id: `poll-${++pollSequence}`,
+        question,
+        timelineItemId,
+        creator: { id: creator.id, name: creator.name },
+        votes: {},
+      };
+      state.polls.push(poll);
+      record('poll.created', creator, { pollId: poll.id, question });
+      return structuredClone(poll);
+    },
+
+    vote({ pollId, voter, choice }) {
+      requireMember(voter);
+      const poll = state.polls.find((p) => p.id === pollId);
+      if (!poll) throw new Error('Poll not found');
+      poll.votes[voter.id] = choice;
+      record('poll.voted', voter, { pollId, choice });
+      return structuredClone(poll);
+    },
+
+    getPollResults(pollId) {
+      const poll = state.polls.find((p) => p.id === pollId);
+      if (!poll) throw new Error('Poll not found');
+      const results = { yes: 0, no: 0, total: 0 };
+      Object.values(poll.votes).forEach((choice) => {
+        if (choice === 'yes') results.yes++;
+        else if (choice === 'no') results.no++;
+        results.total++;
+      });
+      return results;
     },
 
     snapshot() {

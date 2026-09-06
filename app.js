@@ -41,12 +41,17 @@ function createTimelineCard(item) {
   const card = document.createElement('article');
   card.className = 'timeline-card';
   card.dataset.timelineId = item.id;
+  
+  const poll = store.snapshot().polls.find(p => p.timelineItemId === item.id);
+  const pollHtml = poll ? renderPollCard(poll) : `<button class="poll-btn" data-timeline-id="${item.id}">发起投票</button>`;
+  
   card.innerHTML = `
     <img src="${item.image}" alt="${item.name}">
     <input aria-label="${item.name} 的时间" type="time" value="${item.time}">
     <div>
       <div class="name">${item.name}</div>
       <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
+      <div class="poll-section">${pollHtml}</div>
     </div>
     <span class="drag-handle" aria-label="可拖动">⠿</span>
   `;
@@ -60,7 +65,51 @@ function createTimelineCard(item) {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
     render();
   });
+  
+  const pollBtn = card.querySelector('.poll-btn');
+  if (pollBtn) {
+    pollBtn.addEventListener('click', () => {
+      const question = prompt('投票问题：');
+      if (question) {
+        store.createPoll({ question, timelineItemId: item.id, creator: editor });
+        render();
+      }
+    });
+  }
+  
+  card.querySelectorAll('.vote-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pollId = btn.dataset.pollId;
+      const choice = btn.dataset.choice;
+      store.vote({ pollId, voter: editor, choice });
+      render();
+    });
+  });
+  
   return card;
+}
+
+function renderPollCard(poll) {
+  const results = store.getPollResults(poll.id);
+  const userVote = poll.votes[editor.id];
+  const total = results.total || 1;
+  const yesPercent = Math.round((results.yes / total) * 100);
+  const noPercent = Math.round((results.no / total) * 100);
+  
+  return `
+    <div class="poll-card" data-poll-id="${poll.id}">
+      <div class="poll-question">${poll.question}</div>
+      <div class="poll-options">
+        <button class="vote-btn ${userVote === 'yes' ? 'voted' : ''}" data-poll-id="${poll.id}" data-choice="yes">
+          👍 ${results.yes} (${yesPercent}%)
+        </button>
+        <button class="vote-btn ${userVote === 'no' ? 'voted' : ''}" data-poll-id="${poll.id}" data-choice="no">
+          👎 ${results.no} (${noPercent}%)
+        </button>
+      </div>
+      <div class="poll-total">共 ${results.total} 人投票</div>
+    </div>
+  `;
 }
 
 function renderTimeline() {
