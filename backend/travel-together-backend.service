@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=www
 WorkingDirectory=/opt/1panel/www/sites/travel-together/backend
 Environment="PATH=/usr/bin:/usr/local/bin"
 EnvironmentFile=/opt/1panel/www/sites/travel-together/backend/.env
