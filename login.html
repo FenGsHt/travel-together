@@ -147,35 +147,24 @@
     </div>
 
     <script>
-        // SHA-256 哈希值
-        const CORRECT_HASH = 'cb40d427eaa19eeae32560c229f29484ae062b64e251412169a5d13071442d6e';
+        // 访问密钥（前端验证，生产环境应在后端验证）
+        const CORRECT_KEY = 'fengshtindeed';
         
         // 检查是否已登录
         if (localStorage.getItem('authenticated') === 'true') {
-            window.location.href = 'index.html';
+            window.location.href = 'projects.html';
         }
         
-        // SHA-256 哈希函数
-        async function sha256(message) {
-            const msgBuffer = new TextEncoder().encode(message);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex;
-        }
-        
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const input = document.getElementById('accessKey');
             const errorMessage = document.getElementById('errorMessage');
             const key = input.value.trim();
             
-            const hash = await sha256(key);
-            
-            if (hash === CORRECT_HASH) {
+            if (key === CORRECT_KEY) {
                 localStorage.setItem('authenticated', 'true');
-                window.location.href = 'index.html';
+                window.location.href = 'projects.html';
             } else {
                 input.classList.add('error');
                 errorMessage.classList.add('show');
