@@ -1,10 +1,25 @@
 import { createTripStore } from './src/trip-store.mjs';
 import { travelBlocks } from './src/travel-blocks.mjs';
 import * as api from './src/api-client.mjs';
+import { createProjectAutosave } from './src/project-autosave.mjs';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
 let currentProject = null;
+let autosaveEnabled = false;
+
+const projectAutosave = createProjectAutosave({
+  delay: 500,
+  save: async (data) => {
+    if (!currentProjectId) return;
+    const updatedProject = await api.updateProject(currentProjectId, { data });
+    if (!updatedProject || updatedProject.error) {
+      throw new Error('保存项目失败');
+    }
+    currentProject = updatedProject;
+  },
+  onError: (error) => console.error('Project autosave failed:', error),
+});
 
 // 从后端加载项目数据
 async function loadProject() {
@@ -157,16 +172,18 @@ async function init() {
     initialBlock('duoyi-tree', 3, '06:10');
   }
   
+  // 项目加载时调用的恢复方法不应进入用户可撤销的编辑历史。
+  store.clearHistory();
   renderLibrary();
-  render();
+  render({ persist: false });
+  autosaveEnabled = true;
 }
 
 // 启动初始化
 init();
 
-async function saveProjectData() {
-  const snapshot = store.snapshot();
-  await api.updateProject(currentProjectId, { data: snapshot });
+function saveProjectData() {
+  projectAutosave.schedule(store.snapshot());
 }
 
 function timelineItemsFor(day) {
@@ -204,7 +221,7 @@ function createTimelineCard(item) {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
     render();
   });
-  
+
   // Drag and drop for reordering and cross-day moves
   card.addEventListener('dragstart', (event) => {
     event.stopPropagation();
@@ -212,12 +229,12 @@ function createTimelineCard(item) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/timeline-item', item.id);
   });
-  
+
   card.addEventListener('dragend', () => {
     card.classList.remove('dragging');
     document.querySelectorAll('.timeline-card.drag-over').forEach(c => c.classList.remove('drag-over'));
   });
-  
+
   card.addEventListener('dragover', (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -226,34 +243,34 @@ function createTimelineCard(item) {
       card.classList.add('drag-over');
     }
   });
-  
+
   card.addEventListener('dragleave', () => {
     card.classList.remove('drag-over');
   });
-  
+
   card.addEventListener('drop', (event) => {
     event.preventDefault();
     event.stopPropagation();
     card.classList.remove('drag-over');
-    
+
     const draggedItemId = event.dataTransfer.getData('text/timeline-item');
     if (!draggedItemId || draggedItemId === item.id) return;
-    
+
     // Get the day of the target card
     const targetDay = item.day;
-    
+
     // Get all items in this day
     const dayItems = timelineItemsFor(targetDay);
     const targetIndex = dayItems.findIndex(i => i.id === item.id);
-    
+
     if (targetIndex === -1) return;
-    
+
     // Move the item
     store.moveTimelineItem({ timelineId: draggedItemId, day: targetDay, editor });
-    
+
     // Reorder
     store.reorderTimeline({ timelineId: draggedItemId, newIndex: targetIndex, day: targetDay, editor });
-    
+
     render();
   });
   
@@ -420,11 +437,11 @@ function renderAiDrafts() {
   });
 }
 
-function render() {
+function render({ persist = autosaveEnabled } = {}) {
   renderTimeline();
   renderActivity();
   renderAiDrafts();
-  saveProjectData(); // 每次渲染后自动保存
+  if (persist) saveProjectData();
 }
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
@@ -452,6 +469,23 @@ document.querySelector('#ai-import').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-day-link]').forEach((button) => {
   button.addEventListener('click', () => document.querySelector(`#day-${button.dataset.dayLink}`).scrollIntoView({ behavior: 'smooth', block: 'center' }));
+});
+window.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const target = event.target;
+  if (target instanceof HTMLElement && target.matches('input, textarea, [contenteditable="true"]')) return;
+
+  const key = event.key.toLowerCase();
+  const shouldRedo = key === 'y' || (key === 'z' && event.shiftKey);
+  const shouldUndo = key === 'z' && !event.shiftKey;
+  if (!shouldUndo && !shouldRedo) return;
+
+  event.preventDefault();
+  const changed = shouldRedo ? store.redo() : store.undo();
+  if (changed) render();
+});
+window.addEventListener('pagehide', () => {
+  if (autosaveEnabled) projectAutosave.flush().catch((error) => console.error('Project autosave failed:', error));
 });
 
 renderLibrary();
