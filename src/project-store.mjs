@@ -24,7 +24,7 @@ export class ProjectStore {
 
   createProject({ name, description, startDate, endDate, destination }) {
     const project = {
-      id: `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `project_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       name,
       description: description || '',
       startDate,

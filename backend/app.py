@@ -8,6 +8,7 @@ import os
 import json
 import hmac
 import hashlib
+import fcntl
 from datetime import datetime
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
@@ -195,17 +196,26 @@ def require_user_auth(f):
 # ============== 项目管理 API ==============
 
 def load_projects():
-    """加载项目数据"""
-    if PROJECTS_FILE.exists():
-        with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
+    """加载项目数据（带文件锁）"""
+    if not PROJECTS_FILE.exists():
+        return []
+    
+    with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        try:
             return json.load(f)
-    return []
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def save_projects(projects):
-    """保存项目数据"""
+    """保存项目数据（带文件锁）"""
     with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(projects, f, ensure_ascii=False, indent=2)
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            json.dump(projects, f, ensure_ascii=False, indent=2)
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def require_auth(f):
@@ -267,8 +277,14 @@ def create_project():
     """创建新项目"""
     data = request.get_json(silent=True) or {}
     
+    # 生成项目 ID
+    project_id = f"project_{int(datetime.now().timestamp() * 1000)}"
+    
+    # 创建者自动成为 owner
+    owner_id = session['user_id']
+    
     project = {
-        'id': f"project_{int(datetime.now().timestamp() * 1000)}",
+        'id': project_id,
         'name': data.get('name', '未命名项目'),
         'description': data.get('description', ''),
         'destination': data.get('destination', ''),
@@ -276,6 +292,13 @@ def create_project():
         'endDate': data.get('endDate', ''),
         'createdAt': datetime.now().isoformat(),
         'updatedAt': datetime.now().isoformat(),
+        'members': [
+            {
+                'userId': owner_id,
+                'role': 'owner',
+                'joinedAt': datetime.now().isoformat()
+            }
+        ],
         'data': {
             'blocks': [],
             'timeline': [],
@@ -342,9 +365,160 @@ def update_project(project_id):
 @app.route('/api/projects/<project_id>', methods=['DELETE'])
 @require_auth
 def delete_project(project_id):
-    """删除项目"""
+    """删除项目（仅 owner 可操作）"""
+    user_id = session['user_id']
     projects = load_projects()
+    
+    # 查找项目
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 检查权限
+    member = next((m for m in project['members'] if m['userId'] == user_id), None)
+    if not member or member['role'] != 'owner':
+        return jsonify({'error': '仅项目所有者可删除项目'}), 403
+    
+    # 删除项目
     projects = [p for p in projects if p['id'] != project_id]
+    save_projects(projects)
+    
+    return jsonify({'success': True})
+
+
+@app.route('/api/projects/<project_id>/invite', methods=['POST'])
+@require_auth
+def invite_member(project_id):
+    """邀请成员加入项目"""
+    data = request.get_json(silent=True) or {}
+    invitee_id = data.get('userId')
+    role = data.get('role', 'editor')  # 默认角色为 editor
+    
+    if not invitee_id:
+        return jsonify({'error': '缺少 userId'}), 400
+    
+    if role not in ['owner', 'editor', 'viewer']:
+        return jsonify({'error': '无效的角色'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 检查是否已存在
+    existing = next((m for m in project['members'] if m['userId'] == invitee_id), None)
+    if existing:
+        return jsonify({'error': '用户已是项目成员'}), 400
+    
+    # 添加成员
+    project['members'].append({
+        'userId': invitee_id,
+        'role': role,
+        'joinedAt': datetime.now().isoformat()
+    })
+    project['updatedAt'] = datetime.now().isoformat()
+    
+    save_projects(projects)
+    
+    return jsonify({'success': True, 'member': project['members'][-1]})
+
+
+@app.route('/api/projects/<project_id>/members', methods=['GET'])
+@require_auth
+def get_members(project_id):
+    """获取项目成员列表"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 获取成员详细信息
+    members_info = []
+    for member in project['members']:
+        user = get_user_by_id(member['userId'])
+        if user:
+            members_info.append({
+                'userId': member['userId'],
+                'username': user['username'],
+                'displayName': user['displayName'],
+                'role': member['role'],
+                'joinedAt': member['joinedAt']
+            })
+    
+    return jsonify({'members': members_info})
+
+
+@app.route('/api/projects/<project_id>/members/<user_id>', methods=['PUT'])
+@require_auth
+def update_member_role(project_id, user_id):
+    """更新成员角色（仅 owner 可操作）"""
+    data = request.get_json(silent=True) or {}
+    new_role = data.get('role')
+    
+    if new_role not in ['owner', 'editor', 'viewer']:
+        return jsonify({'error': '无效的角色'}), 400
+    
+    current_user_id = session['user_id']
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 检查当前用户权限
+    current_member = next((m for m in project['members'] if m['userId'] == current_user_id), None)
+    if not current_member or current_member['role'] != 'owner':
+        return jsonify({'error': '仅项目所有者可修改成员角色'}), 403
+    
+    # 更新角色
+    target_member = next((m for m in project['members'] if m['userId'] == user_id), None)
+    if not target_member:
+        return jsonify({'error': '成员不存在'}), 404
+    
+    target_member['role'] = new_role
+    project['updatedAt'] = datetime.now().isoformat()
+    
+    save_projects(projects)
+    
+    return jsonify({'success': True})
+
+
+@app.route('/api/projects/<project_id>/members/<user_id>', methods=['DELETE'])
+@require_auth
+def remove_member(project_id, user_id):
+    """移除成员（owner 可移除任何人，其他成员只能自己退出）"""
+    current_user_id = session['user_id']
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 检查权限
+    current_member = next((m for m in project['members'] if m['userId'] == current_user_id), None)
+    if not current_member:
+        return jsonify({'error': '你不是项目成员'}), 403
+    
+    # 非 owner 只能移除自己
+    if current_member['role'] != 'owner' and current_user_id != user_id:
+        return jsonify({'error': '仅项目所有者可移除其他成员'}), 403
+    
+    # 不能移除最后一个 owner
+    target_member = next((m for m in project['members'] if m['userId'] == user_id), None)
+    if not target_member:
+        return jsonify({'error': '成员不存在'}), 404
+    
+    if target_member['role'] == 'owner':
+        owner_count = sum(1 for m in project['members'] if m['role'] == 'owner')
+        if owner_count == 1:
+            return jsonify({'error': '不能移除唯一的项目所有者'}), 400
+    
+    # 移除成员
+    project['members'] = [m for m in project['members'] if m['userId'] != user_id]
+    project['updatedAt'] = datetime.now().isoformat()
+    
     save_projects(projects)
     
     return jsonify({'success': True})
