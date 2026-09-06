@@ -15,6 +15,8 @@ const storeIds = new Map();
 const timeline = document.querySelector('#timeline');
 const library = document.querySelector('#block-library');
 const activityList = document.querySelector('#activity-list');
+const aiSourceInput = document.querySelector('#ai-source');
+const aiDrafts = document.querySelector('#ai-drafts');
 let draggedBlockId = null;
 
 for (const block of travelBlocks) {
@@ -89,12 +91,12 @@ function renderTimeline() {
       if (!sourceId) return;
       const existing = timelineItemsFor(day.id);
       const hour = String(Math.min(19, 9 + existing.length * 2)).padStart(2, '0');
-      store.scheduleBlock({ blockId: storeIds.get(sourceId), day: day.id, time: `${hour}:00`, editor });
+      store.scheduleBlock({ blockId: sourceId, day: day.id, time: `${hour}:00`, editor });
       render();
     });
     dropZone.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && draggedBlockId) {
-        store.scheduleBlock({ blockId: storeIds.get(draggedBlockId), day: day.id, time: '10:00', editor });
+        store.scheduleBlock({ blockId: draggedBlockId, day: day.id, time: '10:00', editor });
         render();
       }
     });
@@ -108,8 +110,10 @@ function renderTimeline() {
 
 function renderLibrary(query = '') {
   const keyword = query.trim().toLowerCase();
+  const knownCities = new Map(travelBlocks.map((item) => [item.name, item.city]));
   library.replaceChildren();
-  travelBlocks
+  store.snapshot().blocks
+    .map((block) => ({ ...block, city: knownCities.get(block.name) || 'AI 整理' }))
     .filter((block) => !keyword || `${block.name}${block.city}`.toLowerCase().includes(keyword))
     .forEach((block) => {
       const element = document.createElement('article');
@@ -144,15 +148,42 @@ function renderActivity() {
   }
   activity.forEach((event) => {
     const item = document.createElement('li');
-    const action = event.type === 'timeline.created' ? '把旅行块排进了行程' : event.type === 'timeline.moved' ? '调整了行程时间' : '更新了行程备注';
+    const action = event.type === 'timeline.created'
+      ? '把旅行块排进了行程'
+      : event.type === 'timeline.moved'
+        ? '调整了行程时间'
+        : event.type === 'ai.draft.imported'
+          ? '审核并导入了 AI 整理的旅行块'
+          : '更新了行程备注';
     item.innerHTML = `<strong>${event.editor.name}</strong> ${action}<br><span>刚刚</span>`;
     activityList.append(item);
+  });
+}
+
+function renderAiDrafts() {
+  aiDrafts.replaceChildren();
+  const drafts = store.snapshot().aiDrafts.filter((draft) => draft.status === 'draft');
+  drafts.forEach((draft) => {
+    const element = document.createElement('article');
+    element.className = 'ai-draft';
+    element.innerHTML = `
+      <img src="${draft.image}" alt="${draft.name}">
+      <div><strong>${draft.name}</strong><small>来源：${draft.source}</small></div>
+      <button>审核导入</button>
+    `;
+    element.querySelector('button').addEventListener('click', () => {
+      store.approveAiDraft({ draftId: draft.id, editor });
+      renderLibrary(document.querySelector('#search-blocks').value);
+      render();
+    });
+    aiDrafts.append(element);
   });
 }
 
 function render() {
   renderTimeline();
   renderActivity();
+  renderAiDrafts();
 }
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
@@ -164,6 +195,20 @@ document.querySelector('#copy-invite').addEventListener('click', async (event) =
 });
 document.querySelector('#share-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
 document.querySelector('#add-block').addEventListener('click', () => alert('MVP 下一步：上传图片并创建自定义旅行块。'));
+document.querySelector('#ai-import').addEventListener('click', () => {
+  const source = aiSourceInput.value.trim();
+  if (!source) {
+    aiSourceInput.focus();
+    return;
+  }
+  store.createAiDraft({
+    name: source.includes('团山') ? '团山民居' : 'AI 提取的滇南灵感',
+    image: 'diannan-images/spots/建水古城.jpg',
+    source: source.slice(0, 32),
+  });
+  aiSourceInput.value = '';
+  render();
+});
 document.querySelectorAll('[data-day-link]').forEach((button) => {
   button.addEventListener('click', () => document.querySelector(`#day-${button.dataset.dayLink}`).scrollIntoView({ behavior: 'smooth', block: 'center' }));
 });

@@ -93,3 +93,25 @@ test('a scheduled travel block keeps editable time and note details', () => {
   assert.equal(edited.note, '早点去，避开排队');
   assert.equal(store.snapshot().activity.at(0).type, 'timeline.edited');
 });
+
+test('AI travel suggestions remain drafts until a planner imports them', () => {
+  const store = createTripStore();
+  const draft = store.createAiDraft({
+    name: '团山民居',
+    image: 'diannan-images/spots/建水古城.jpg',
+    source: '滇南攻略摘录',
+  });
+
+  assert.equal(draft.status, 'draft');
+  assert.equal(store.snapshot().blocks.length, 0);
+
+  const imported = store.approveAiDraft({
+    draftId: draft.id,
+    editor: { id: 'feng', name: 'feng' },
+  });
+
+  assert.equal(imported.name, '团山民居');
+  assert.equal(store.snapshot().blocks.length, 1);
+  assert.equal(store.snapshot().aiDrafts[0].status, 'imported');
+  assert.equal(store.snapshot().activity.at(0).type, 'ai.draft.imported');
+});

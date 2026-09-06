@@ -4,6 +4,7 @@ export function createTripStore() {
   const state = {
     blocks: [],
     timeline: [],
+    aiDrafts: [],
     activity: [],
   };
 
@@ -45,6 +46,37 @@ export function createTripStore() {
         image: image.trim(),
       };
       state.blocks.push(block);
+      return structuredClone(block);
+    },
+
+    createAiDraft({ name, image, source }) {
+      if (!name?.trim() || !image?.trim() || !source?.trim()) {
+        throw new Error('An AI draft needs a name, image, and source');
+      }
+      const draft = {
+        id: `ai-draft-${state.aiDrafts.length + 1}`,
+        name: name.trim(),
+        image: image.trim(),
+        source: source.trim(),
+        status: 'draft',
+      };
+      state.aiDrafts.push(draft);
+      return structuredClone(draft);
+    },
+
+    approveAiDraft({ draftId, editor }) {
+      requireMember(editor);
+      const draft = state.aiDrafts.find((item) => item.id === draftId);
+      if (!draft) throw new Error('AI draft not found');
+      if (draft.status !== 'draft') throw new Error('AI draft is no longer pending');
+      const block = {
+        id: `block-${++blockSequence}`,
+        name: draft.name,
+        image: draft.image,
+      };
+      state.blocks.push(block);
+      draft.status = 'imported';
+      record('ai.draft.imported', editor, { draftId: draft.id, blockId: block.id, source: draft.source });
       return structuredClone(block);
     },
 
