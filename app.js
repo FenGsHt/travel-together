@@ -242,6 +242,106 @@ function initRealtime() {
   realtimeClient.on('reconnect_failed', () => {
     showNotification('连接断开，请刷新页面');
   });
+  
+  // 监听光标位置更新
+  realtimeClient.onCursorUpdate((data) => {
+    updateRemoteCursor(data);
+  });
+  
+  // 监听输入事件，广播光标位置
+  setupCursorBroadcast();
+}
+
+// 设置光标位置广播
+function setupCursorBroadcast() {
+  const inputs = document.querySelectorAll('input, textarea');
+  inputs.forEach(input => {
+    input.addEventListener('focus', (e) => {
+      const elementId = e.target.id || e.target.dataset.timelineId || e.target.dataset.commentId;
+      if (elementId) {
+        realtimeClient.broadcastCursor(elementId, { start: e.target.selectionStart, end: e.target.selectionEnd });
+      }
+    });
+    
+    input.addEventListener('click', (e) => {
+      const elementId = e.target.id || e.target.dataset.timelineId || e.target.dataset.commentId;
+      if (elementId) {
+        realtimeClient.broadcastCursor(elementId, { start: e.target.selectionStart, end: e.target.selectionEnd });
+      }
+    });
+    
+    input.addEventListener('keyup', (e) => {
+      const elementId = e.target.id || e.target.dataset.timelineId || e.target.dataset.commentId;
+      if (elementId) {
+        realtimeClient.broadcastCursor(elementId, { start: e.target.selectionStart, end: e.target.selectionEnd });
+      }
+    });
+  });
+}
+
+// 更新远程光标显示
+function updateRemoteCursor(data) {
+  const { user_id, user_name, element_id, position } = data;
+  
+  // 移除旧的光标标记
+  const oldCursors = document.querySelectorAll(`.remote-cursor[data-user-id="${user_id}"]`);
+  oldCursors.forEach(cursor => cursor.remove());
+  
+  // 查找目标元素
+  const targetElement = document.querySelector(`[data-timeline-id="${element_id}"], [data-comment-id="${element_id}"], #${element_id}`);
+  if (!targetElement) return;
+  
+  // 创建光标标记
+  const cursorMarker = document.createElement('div');
+  cursorMarker.className = 'remote-cursor';
+  cursorMarker.dataset.userId = user_id;
+  cursorMarker.style.cssText = `
+    position: absolute;
+    background: rgba(37, 99, 235, 0.3);
+    border-left: 2px solid rgb(37, 99, 235);
+    pointer-events: none;
+    z-index: 1000;
+  `;
+  
+  // 添加用户名标签
+  const label = document.createElement('div');
+  label.className = 'remote-cursor-label';
+  label.textContent = user_name;
+  label.style.cssText = `
+    position: absolute;
+    top: -20px;
+    left: 0;
+    background: rgb(37, 99, 235);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    white-space: nowrap;
+  `;
+  cursorMarker.appendChild(label);
+  
+  // 定位光标
+  const rect = targetElement.getBoundingClientRect();
+  const containerRect = targetElement.offsetParent.getBoundingClientRect();
+  
+  if (position && targetElement.setSelectionRange) {
+    // 对于输入框，使用选区位置
+    try {
+      targetElement.setSelectionRange(position.start, position.end);
+    } catch (e) {
+      console.warn('无法设置选区:', e);
+    }
+  }
+  
+  // 在元素上添加光标标记
+  targetElement.style.position = 'relative';
+  targetElement.appendChild(cursorMarker);
+  
+  // 3秒后自动隐藏（如果没有新更新）
+  setTimeout(() => {
+    cursorMarker.style.opacity = '0';
+    setTimeout(() => cursorMarker.remove(), 300);
+  }, 3000);
 }
 
 // 更新在线用户 UI

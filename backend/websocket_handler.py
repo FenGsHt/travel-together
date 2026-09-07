@@ -16,6 +16,25 @@ def init_socketio(app):
     def handle_connect():
         print(f'Client connected: {request.sid}')
     
+    @socketio.on('cursor_update')
+    def handle_cursor_update(data):
+        """处理光标位置更新"""
+        project_id = data.get('project_id')
+        user_id = data.get('user_id')
+        user_name = data.get('user_name')
+        element_id = data.get('element_id')
+        position = data.get('position')
+        
+        if project_id:
+            # 广播给房间内其他用户
+            emit('cursor_update', {
+                'user_id': user_id,
+                'user_name': user_name,
+                'element_id': element_id,
+                'position': position,
+                'timestamp': data.get('timestamp')
+            }, room=project_id, include_self=False)
+
     @socketio.on('disconnect')
     def handle_disconnect():
         print(f'Client disconnected: {request.sid}')

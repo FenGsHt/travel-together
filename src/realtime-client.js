@@ -94,6 +94,29 @@ class RealtimeClient {
     return Array.from(this.onlineUsers.values());
   }
 
+  // 广播光标位置
+  broadcastCursor(elementId, position) {
+    if (!this.connected || !this.socket) return;
+    
+    this.socket.emit('cursor_update', {
+      project_id: this.projectId,
+      user_id: this.userId,
+      user_name: this.userName,
+      element_id: elementId,
+      position: position,
+      timestamp: Date.now()
+    });
+  }
+
+  // 监听其他人的光标位置
+  onCursorUpdate(callback) {
+    if (!this.socket) return;
+    
+    this.socket.on('cursor_update', (data) => {
+      callback(data);
+    });
+  }
+
   disconnect() {
     if (!this.connected || !this.socket) {
       return;
