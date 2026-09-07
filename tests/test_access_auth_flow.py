@@ -19,6 +19,12 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(backend_app, "PROJECTS_FILE", tmp_path / "projects.json")
     monkeypatch.setattr(backend_app, "PROJECTS_LOCK_FILE", tmp_path / "projects.lock")
     monkeypatch.setattr(backend_app, "NOTIFICATIONS_FILE", tmp_path / "notifications.json")
+    monkeypatch.setattr(
+        backend_app,
+        "NOTIFICATION_PREFERENCES_FILE",
+        tmp_path / "notification_preferences.json",
+        raising=False,
+    )
     monkeypatch.setattr(user_manager, "USERS_FILE", tmp_path / "users.json")
 
     backend_app.app.config.update(TESTING=True, SECRET_KEY="test-flask-secret")
@@ -42,3 +48,25 @@ def test_access_key_login_provides_identity_for_project_and_notifications(client
     unread_count = client.get("/api/notifications/unread-count")
     assert unread_count.status_code == 200
     assert unread_count.get_json() == {"count": 0}
+
+
+def test_authenticated_user_can_read_and_update_notification_preferences(client):
+    client.post("/api/auth/verify", json={"token": "test-access-token"})
+
+    defaults = client.get("/api/notification-preferences")
+    assert defaults.status_code == 200
+    assert defaults.get_json()["preferences"] == {
+        "mentions": True,
+        "polls": True,
+        "system": True,
+    }
+
+    updated = client.put(
+        "/api/notification-preferences",
+        json={"preferences": {"mentions": False, "polls": True, "system": False}},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["preferences"]["mentions"] is False
+
+    persisted = client.get("/api/notification-preferences")
+    assert persisted.get_json()["preferences"]["system"] is False

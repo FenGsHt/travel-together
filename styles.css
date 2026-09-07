@@ -31,8 +31,12 @@ button { cursor: pointer; }
 .notification-panel { position: fixed; top: 70px; right: 20px; width: 360px; max-height: 500px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); z-index: 1000; overflow: hidden; }
 .notification-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--paper); }
 .notification-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); }
-.notification-mark-all { background: transparent; border: none; color: var(--green); font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
-.notification-mark-all:hover { background: var(--green-soft); }
+.notification-header-actions { display: flex; align-items: center; gap: 4px; }
+.notification-settings, .notification-mark-all { background: transparent; border: none; color: var(--green); font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
+.notification-settings:hover, .notification-mark-all:hover { background: var(--green-soft); }
+.notification-settings-form { display: grid; gap: 14px; margin-top: 18px; }
+.notification-settings-form label { display: flex; align-items: center; gap: 9px; color: var(--ink); font-size: 14px; }
+.notification-settings-form input { accent-color: var(--green); }
 .notification-list { max-height: 420px; overflow-y: auto; }
 .notification-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; }
 .notification-item { padding: 16px 20px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background 0.2s; }

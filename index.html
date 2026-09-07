@@ -157,15 +157,30 @@
   <div class="notification-panel" id="notification-panel" style="display: none;">
     <div class="notification-header">
       <h3>通知</h3>
-      <button class="notification-mark-all" id="mark-all-read">全部已读</button>
+      <div class="notification-header-actions">
+        <button class="notification-settings" id="notification-settings" type="button">设置</button>
+        <button class="notification-mark-all" id="mark-all-read" type="button">全部已读</button>
+      </div>
     </div>
     <div class="notification-list" id="notification-list">
       <div class="notification-empty">暂无通知</div>
     </div>
   </div>
 
+  <dialog id="notification-settings-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">通知设置</p>
+    <h2>选择想收到的提醒</h2>
+    <form id="notification-settings-form" class="notification-settings-form">
+      <label><input type="checkbox" name="mentions" checked> 有人在评论中提及我</label>
+      <label><input type="checkbox" name="polls" checked> 投票创建和结果更新</label>
+      <label><input type="checkbox" name="system" checked> 系统与项目提醒</label>
+      <button class="button button-ink" type="submit">保存设置</button>
+    </form>
+  </dialog>
+
   <dialog id="invite-dialog">
-    <button class="dialog-close" aria-label="关闭">×</button>
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
     <p class="eyebrow">邀请同行人</p>
     <h2>把这个行程交给大家一起决定</h2>
     <p>链接有效期 7 天。加入者默认可以评论、投票和添加旅行块。</p>

@@ -35,6 +35,7 @@ DATA_DIR.mkdir(exist_ok=True)
 PROJECTS_FILE = DATA_DIR / "projects.json"
 PROJECTS_LOCK_FILE = DATA_DIR / "projects.lock"
 NOTIFICATIONS_FILE = DATA_DIR / "notifications.json"
+NOTIFICATION_PREFERENCES_FILE = DATA_DIR / "notification_preferences.json"
 
 # 访问令牌（从环境变量读取）
 SITE_ACCESS_TOKEN = os.getenv('SITE_ACCESS_TOKEN', '')
@@ -739,6 +740,68 @@ def ai_get_summary(project_id):
     }
     
     return jsonify(summary)
+
+
+# ============== 通知偏好 API ==============
+
+DEFAULT_NOTIFICATION_PREFERENCES = {
+    'mentions': True,
+    'polls': True,
+    'system': True,
+}
+
+
+def load_notification_preferences():
+    """加载各用户的通知偏好。"""
+    if not NOTIFICATION_PREFERENCES_FILE.exists():
+        return {}
+    with open(NOTIFICATION_PREFERENCES_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def save_notification_preferences(preferences_by_user):
+    """原子地保存各用户的通知偏好。"""
+    temporary_file = NOTIFICATION_PREFERENCES_FILE.with_suffix('.tmp')
+    with open(temporary_file, 'w', encoding='utf-8') as f:
+        json.dump(preferences_by_user, f, ensure_ascii=False, indent=2)
+    temporary_file.replace(NOTIFICATION_PREFERENCES_FILE)
+
+
+def notification_preferences_for(user_id):
+    preferences_by_user = load_notification_preferences()
+    saved = preferences_by_user.get(user_id, {})
+    return {**DEFAULT_NOTIFICATION_PREFERENCES, **saved}
+
+
+@app.route('/api/notification-preferences', methods=['GET'])
+@require_auth
+def get_notification_preferences():
+    """获取当前用户的通知偏好。"""
+    return jsonify({'preferences': notification_preferences_for(session['user_id'])})
+
+
+@app.route('/api/notification-preferences', methods=['PUT'])
+@require_auth
+def update_notification_preferences():
+    """更新当前用户的通知偏好，仅接受已知的布尔开关。"""
+    payload = request.get_json(silent=True) or {}
+    requested = payload.get('preferences')
+    if not isinstance(requested, dict):
+        return jsonify({'error': 'preferences 必须是对象'}), 400
+
+    unknown_keys = set(requested) - set(DEFAULT_NOTIFICATION_PREFERENCES)
+    invalid_values = [key for key, value in requested.items() if not isinstance(value, bool)]
+    if unknown_keys or invalid_values:
+        return jsonify({'error': '通知偏好只能包含 mentions、polls、system 三个布尔值'}), 400
+
+    user_id = session['user_id']
+    preferences_by_user = load_notification_preferences()
+    preferences_by_user[user_id] = {
+        **notification_preferences_for(user_id),
+        **requested,
+    }
+    save_notification_preferences(preferences_by_user)
+    return jsonify({'preferences': preferences_by_user[user_id]})
 
 
 # ============== 通知系统 API ==============

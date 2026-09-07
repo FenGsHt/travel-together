@@ -837,7 +837,9 @@ function render({ persist = autosaveEnabled } = {}) {
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
 document.querySelector('#invite-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
-document.querySelector('.dialog-close').addEventListener('click', () => document.querySelector('#invite-dialog').close());
+document.querySelectorAll('[data-close-dialog]').forEach((button) => {
+  button.addEventListener('click', () => button.closest('dialog')?.close());
+});
 document.querySelector('#reload-conflict').addEventListener('click', () => window.location.reload());
 document.querySelector('#overwrite-conflict').addEventListener('click', async () => {
   try {
@@ -900,6 +902,9 @@ function initNotifications() {
   
   const notificationBtn = document.getElementById('notification-btn');
   const markAllReadBtn = document.getElementById('mark-all-read');
+  const settingsButton = document.getElementById('notification-settings');
+  const settingsDialog = document.getElementById('notification-settings-dialog');
+  const settingsForm = document.getElementById('notification-settings-form');
   
   // 切换通知面板显示
   notificationBtn.addEventListener('click', () => {
@@ -913,6 +918,24 @@ function initNotifications() {
   
   // 全部标记已读
   markAllReadBtn.addEventListener('click', markAllAsRead);
+
+  // 打开并加载通知偏好。
+  settingsButton.addEventListener('click', async () => {
+    await loadNotificationPreferences(settingsForm);
+    settingsDialog.showModal();
+  });
+
+  settingsForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const preferences = Object.fromEntries(
+      ['mentions', 'polls', 'system'].map((key) => [key, settingsForm.elements[key].checked])
+    );
+    const saved = await saveNotificationPreferences(preferences);
+    if (saved) {
+      settingsDialog.close();
+      showNotification('通知设置已保存');
+    }
+  });
   
   // 点击页面其他区域关闭通知面板
   document.addEventListener('click', (e) => {
@@ -932,6 +955,37 @@ function initNotifications() {
         loadNotifications();
       }
     });
+  }
+}
+
+async function loadNotificationPreferences(form) {
+  try {
+    const response = await fetch('/api/notification-preferences', { credentials: 'include' });
+    if (!response.ok) throw new Error('获取通知设置失败');
+    const { preferences } = await response.json();
+    for (const key of ['mentions', 'polls', 'system']) {
+      form.elements[key].checked = preferences[key] !== false;
+    }
+  } catch (error) {
+    console.error('Failed to load notification preferences:', error);
+    showNotification('无法加载通知设置');
+  }
+}
+
+async function saveNotificationPreferences(preferences) {
+  try {
+    const response = await fetch('/api/notification-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ preferences }),
+    });
+    if (!response.ok) throw new Error('保存通知设置失败');
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to save notification preferences:', error);
+    showNotification('保存通知设置失败');
+    return null;
   }
 }
 
