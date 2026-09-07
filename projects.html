@@ -407,29 +407,11 @@
     <form id="create-form">
       <div class="form-group">
         <label for="project-name">项目名称 *</label>
-        <input type="text" id="project-name" required placeholder="例如：国庆滇南之旅" />
-      </div>
-      <div class="form-group">
-        <label for="project-destination">目的地</label>
-        <input type="text" id="project-destination" placeholder="例如：云南·滇南" />
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="project-start">开始日期</label>
-          <input type="date" id="project-start" />
-        </div>
-        <div class="form-group">
-          <label for="project-end">结束日期</label>
-          <input type="date" id="project-end" />
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="project-desc">项目描述</label>
-        <textarea id="project-desc" rows="3" placeholder="简单描述一下这次旅行..."></textarea>
+        <input type="text" id="project-name" required placeholder="输入项目名称" autofocus />
       </div>
       <div class="dialog-actions">
         <button type="button" class="button button-ghost" id="cancel-btn">取消</button>
-        <button type="submit" class="button button-ink">创建项目</button>
+        <button type="submit" class="button button-ink">创建</button>
       </div>
     </form>
   </dialog>
@@ -620,11 +602,7 @@
       e.preventDefault();
       
       const project = await createProject({
-        name: document.getElementById('project-name').value.trim(),
-        destination: document.getElementById('project-destination').value.trim(),
-        startDate: document.getElementById('project-start').value,
-        endDate: document.getElementById('project-end').value,
-        description: document.getElementById('project-desc').value.trim()
+        name: document.getElementById('project-name').value.trim()
       });
       
       if (project) {
