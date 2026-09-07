@@ -256,6 +256,10 @@ function createTimelineCard(item) {
       <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
       ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
+      <div class="comments-section" data-timeline-id="${item.id}">
+        <div class="comments-list"></div>
+        <button class="add-comment-btn" data-timeline-id="${item.id}">💬 添加评论</button>
+      </div>
     </div>
     <span class="drag-handle" aria-label="可拖动">⠿</span>
   `;
@@ -268,6 +272,77 @@ function createTimelineCard(item) {
   noteInput.addEventListener('change', () => {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
     render();
+  });
+
+  // 渲染评论
+  const renderComments = () => {
+    const commentsList = card.querySelector('.comments-list');
+    const comments = store.getCommentsForTimelineItem(item.id);
+    
+    if (comments.length === 0) {
+      commentsList.innerHTML = '<div class="no-comments">暂无评论</div>';
+      return;
+    }
+    
+    commentsList.innerHTML = comments.map(comment => `
+      <div class="comment-item" data-comment-id="${comment.id}">
+        <div class="comment-header">
+          <span class="comment-author">${escapeHtml(comment.author.name)}</span>
+          <span class="comment-time">${new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
+        </div>
+        <div class="comment-content">${escapeHtml(comment.content)}</div>
+        <div class="comment-actions">
+          <button class="like-btn" data-comment-id="${comment.id}">
+            👍 ${comment.likes.length > 0 ? comment.likes.length : ''}
+          </button>
+          ${comment.author.id === editor.id ? `
+            <button class="edit-comment-btn" data-comment-id="${comment.id}">编辑</button>
+            <button class="delete-comment-btn" data-comment-id="${comment.id}">删除</button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+    
+    // 绑定评论操作事件
+    commentsList.querySelectorAll('.like-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        store.likeComment({ commentId: btn.dataset.commentId, user: editor });
+        renderComments();
+      });
+    });
+    
+    commentsList.querySelectorAll('.edit-comment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const comment = comments.find(c => c.id === btn.dataset.commentId);
+        if (comment) {
+          const newContent = prompt('编辑评论:', comment.content);
+          if (newContent && newContent.trim()) {
+            store.editComment({ commentId: btn.dataset.commentId, content: newContent.trim(), editor });
+            renderComments();
+          }
+        }
+      });
+    });
+    
+    commentsList.querySelectorAll('.delete-comment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('确定删除这条评论吗？')) {
+          store.deleteComment({ commentId: btn.dataset.commentId, editor });
+          renderComments();
+        }
+      });
+    });
+  };
+  
+  renderComments();
+  
+  // 添加评论按钮
+  card.querySelector('.add-comment-btn').addEventListener('click', () => {
+    const content = prompt('输入评论内容:');
+    if (content && content.trim()) {
+      store.addComment({ timelineItemId: item.id, content: content.trim(), author: editor });
+      renderComments();
+    }
   });
 
   // Drag and drop for reordering and cross-day moves

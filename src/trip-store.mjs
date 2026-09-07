@@ -7,6 +7,7 @@ export function createTripStore() {
     timeline: [],
     aiDrafts: [],
     polls: [],
+    comments: [],
     activity: [],
   };
   const undoStack = [];
@@ -279,6 +280,69 @@ export function createTripStore() {
         results.total++;
       });
       return results;
+    },
+
+    addComment({ timelineItemId, content, author }) {
+      requireMember(author);
+      if (!content?.trim()) throw new Error('Comment content cannot be empty');
+      checkpoint();
+      const comment = {
+        id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timelineItemId,
+        content: content.trim(),
+        author: { id: author.id, name: author.name },
+        likes: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.comments.push(comment);
+      record('comment.added', author, { commentId: comment.id, timelineItemId });
+      return structuredClone(comment);
+    },
+
+    editComment({ commentId, content, editor }) {
+      requireMember(editor);
+      if (!content?.trim()) throw new Error('Comment content cannot be empty');
+      const comment = state.comments.find(c => c.id === commentId);
+      if (!comment) throw new Error('Comment not found');
+      if (comment.author.id !== editor.id) throw new Error('Can only edit own comments');
+      checkpoint();
+      comment.content = content.trim();
+      comment.updatedAt = new Date().toISOString();
+      record('comment.edited', editor, { commentId });
+      return structuredClone(comment);
+    },
+
+    deleteComment({ commentId, editor }) {
+      requireMember(editor);
+      const comment = state.comments.find(c => c.id === commentId);
+      if (!comment) throw new Error('Comment not found');
+      if (comment.author.id !== editor.id) throw new Error('Can only delete own comments');
+      checkpoint();
+      state.comments = state.comments.filter(c => c.id !== commentId);
+      record('comment.deleted', editor, { commentId });
+      return true;
+    },
+
+    likeComment({ commentId, user }) {
+      requireMember(user);
+      const comment = state.comments.find(c => c.id === commentId);
+      if (!comment) throw new Error('Comment not found');
+      checkpoint();
+      const likeIndex = comment.likes.indexOf(user.id);
+      if (likeIndex >= 0) {
+        comment.likes.splice(likeIndex, 1);
+      } else {
+        comment.likes.push(user.id);
+      }
+      record('comment.liked', user, { commentId });
+      return structuredClone(comment);
+    },
+
+    getCommentsForTimelineItem(timelineItemId) {
+      return state.comments
+        .filter(c => c.timelineItemId === timelineItemId)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
     snapshot() {
