@@ -8,6 +8,9 @@ class RealtimeClient {
     this.userName = null;
     this.connected = false;
     this.listeners = new Map();
+    this.onlineUsers = new Map(); // 在线用户列表
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
   }
 
   connect(projectId, userId, userName) {
@@ -54,19 +57,41 @@ class RealtimeClient {
     // 用户加入
     this.socket.on('user_joined', (data) => {
       console.log('User joined:', data);
+      this.onlineUsers.set(data.user_id, {
+        id: data.user_id,
+        name: data.user_name,
+        joinedAt: Date.now()
+      });
       this.emit('user_joined', data);
+      this.emit('online_users_changed', this.getOnlineUsers());
     });
 
     // 用户离开
     this.socket.on('user_left', (data) => {
       console.log('User left:', data);
+      this.onlineUsers.delete(data.user_id);
       this.emit('user_left', data);
+      this.emit('online_users_changed', this.getOnlineUsers());
+    });
+
+    // 接收当前在线用户列表
+    this.socket.on('online_users', (users) => {
+      console.log('Online users:', users);
+      this.onlineUsers.clear();
+      users.forEach(user => {
+        this.onlineUsers.set(user.id, user);
+      });
+      this.emit('online_users_changed', this.getOnlineUsers());
     });
 
     // 连接错误
     this.socket.on('connect_error', (error) => {
       console.error('WebSocket connection error:', error);
     });
+  }
+
+  getOnlineUsers() {
+    return Array.from(this.onlineUsers.values());
   }
 
   disconnect() {
@@ -86,6 +111,25 @@ class RealtimeClient {
     this.projectId = null;
     this.userId = null;
     this.userName = null;
+    this.onlineUsers.clear();
+  }
+
+  // 断线重连
+  reconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('Max reconnect attempts reached');
+      this.emit('reconnect_failed');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`Reconnecting... attempt ${this.reconnectAttempts}`);
+    
+    setTimeout(() => {
+      if (this.projectId && this.userId && this.userName) {
+        this.connect(this.projectId, this.userId, this.userName);
+      }
+    }, 2000 * this.reconnectAttempts); // 指数退避
   }
 
   // 广播编辑操作

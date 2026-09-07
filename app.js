@@ -209,6 +209,12 @@ function initRealtime() {
   // 连接 WebSocket
   realtimeClient.connect(currentProjectId, editor.id, editor.name);
   
+  // 监听在线用户变化
+  realtimeClient.on('online_users_changed', (users) => {
+    console.log('在线用户更新:', users);
+    updateOnlineUsersUI(users);
+  });
+  
   // 监听远程编辑
   realtimeClient.on('remote_edit', (data) => {
     console.log('收到远程编辑:', data);
@@ -231,6 +237,29 @@ function initRealtime() {
     console.log('用户离开:', data);
     showNotification(`${data.user_name} 离开了项目`);
   });
+  
+  // 监听断线重连
+  realtimeClient.on('reconnect_failed', () => {
+    showNotification('连接断开，请刷新页面');
+  });
+}
+
+// 更新在线用户 UI
+function updateOnlineUsersUI(users) {
+  const container = document.querySelector('.online-users');
+  if (!container) return;
+  
+  if (users.length === 0) {
+    container.innerHTML = '<span class="no-users">暂无其他用户</span>';
+    return;
+  }
+  
+  container.innerHTML = users.map(user => `
+    <div class="online-user">
+      <span class="user-avatar">${user.name.charAt(0)}</span>
+      <span class="user-name">${user.name}</span>
+    </div>
+  `).join('');
 }
 
 // 广播编辑操作
