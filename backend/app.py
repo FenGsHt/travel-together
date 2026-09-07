@@ -38,6 +38,9 @@ NOTIFICATIONS_FILE = DATA_DIR / "notifications.json"
 
 # 访问令牌（从环境变量读取）
 SITE_ACCESS_TOKEN = os.getenv('SITE_ACCESS_TOKEN', '')
+# 访问密钥登录时使用的共享协作身份。后续接入独立账号后由真实用户覆盖。
+SITE_ACCESS_USER_ID = os.getenv('SITE_ACCESS_USER_ID', 'site-access-user')
+SITE_ACCESS_USER_NAME = os.getenv('SITE_ACCESS_USER_NAME', '协作访客')
 
 # AI API Key（从环境变量读取）
 AI_API_KEY = os.getenv('AI_API_KEY', '')
@@ -53,6 +56,22 @@ def _access_configured():
 def _access_token_fingerprint():
     """生成令牌指纹（哈希值）"""
     return hashlib.sha256(SITE_ACCESS_TOKEN.encode('utf-8')).hexdigest()
+
+
+def resolve_user_profile(user_id):
+    """返回会话用户的安全公开资料，兼容访问密钥模式与注册用户。"""
+    if user_id == SITE_ACCESS_USER_ID:
+        return {
+            'id': SITE_ACCESS_USER_ID,
+            'username': 'site-access',
+            'display_name': SITE_ACCESS_USER_NAME,
+        }
+    return get_user_by_id(user_id)
+
+
+def display_name_for(user):
+    """兼容旧数据的用户展示名字段。"""
+    return user.get('display_name') or user.get('displayName') or user.get('username', '未知用户')
 
 
 @app.route('/api/auth/status', methods=['GET'])
@@ -84,10 +103,12 @@ def verify_access():
     if not hmac.compare_digest(token, SITE_ACCESS_TOKEN):
         return jsonify({'success': False, 'error': '令牌无效'}), 401
 
-    # 清除旧会话，设置新认证
+    # 清除旧会话，设置新认证和访问密钥模式的共享协作身份。
     session.clear()
     session['site_access'] = True
     session['site_access_token_hash'] = _access_token_fingerprint()
+    session['user_id'] = SITE_ACCESS_USER_ID
+    session['username'] = 'site-access'
     
     return jsonify({'success': True})
 
@@ -159,7 +180,7 @@ def get_current_user():
     if not user_id:
         return jsonify({'authenticated': False}), 401
     
-    user = get_user_by_id(user_id)
+    user = resolve_user_profile(user_id)
     
     if not user:
         session.clear()
@@ -186,7 +207,7 @@ def require_user_auth(f):
         if not user_id:
             return jsonify({'error': '未登录'}), 401
         
-        user = get_user_by_id(user_id)
+        user = resolve_user_profile(user_id)
         if not user:
             session.clear()
             return jsonify({'error': '用户不存在'}), 401
@@ -486,12 +507,12 @@ def get_members(project_id):
     # 获取成员详细信息
     members_info = []
     for member in project['members']:
-        user = get_user_by_id(member['userId'])
+        user = resolve_user_profile(member['userId'])
         if user:
             members_info.append({
                 'userId': member['userId'],
                 'username': user['username'],
-                'displayName': user['displayName'],
+                'displayName': display_name_for(user),
                 'role': member['role'],
                 'joinedAt': member['joinedAt']
             })
@@ -845,7 +866,13 @@ def notify_mentioned_users(project_id, comment_data, author_id):
     for mentioned_name in mentions:
         # 查找被提及的用户
         all_users = get_all_users()
-        mentioned_user = next((u for u in all_users if u['username'] == mentioned_name or u['displayName'] == mentioned_name), None)
+        mentioned_user = next(
+            (
+                user for user in all_users
+                if user['username'] == mentioned_name or display_name_for(user) == mentioned_name
+            ),
+            None,
+        )
         
         if mentioned_user and mentioned_user['id'] != author_id and mentioned_user['id'] in member_ids:
             notif = create_notification(
@@ -873,7 +900,7 @@ def add_comment_with_notification(project_id):
     user_id = session['user_id']
     
     # 获取用户信息
-    user = get_user_by_id(user_id)
+    user = resolve_user_profile(user_id)
     if not user:
         return jsonify({'error': '用户不存在'}), 404
     
@@ -883,7 +910,7 @@ def add_comment_with_notification(project_id):
         'content': data.get('content', ''),
         'author': {
             'id': user_id,
-            'name': user['displayName']
+            'name': display_name_for(user)
         },
         'mentions': data.get('mentions', []),
         'createdAt': datetime.now().isoformat()
