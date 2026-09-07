@@ -364,19 +364,32 @@ function renderPollCard(poll) {
   const deadline = poll.deadlineAt
     ? `截止：${new Date(poll.deadlineAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}`
     : '不限时';
-  const optionsHtml = poll.options.map((option) => {
-    const percent = Math.round((results[option] / total) * 100);
+  
+  // 生成图表数据
+  const maxCount = Math.max(...poll.options.map(opt => results[opt] || 0), 1);
+  const chartHtml = poll.options.map((option) => {
+    const count = results[option] || 0;
+    const percent = Math.round((count / total) * 100);
+    const barWidth = Math.round((count / maxCount) * 100);
     const voted = userVote === option ? 'voted' : '';
-    return `<button class="vote-btn ${voted}" data-poll-id="${poll.id}" data-choice="${escapeHtml(option)}" ${pollIsOpen ? '' : 'disabled'}>
-      ${escapeHtml(option)} ${results[option]} (${percent}%)
-    </button>`;
+    return `
+      <div class="poll-option-row">
+        <button class="vote-btn ${voted}" data-poll-id="${poll.id}" data-choice="${escapeHtml(option)}" ${pollIsOpen ? '' : 'disabled'}>
+          ${escapeHtml(option)}
+        </button>
+        <div class="poll-chart">
+          <div class="poll-bar" style="width: ${barWidth}%"></div>
+          <span class="poll-count">${count} (${percent}%)</span>
+        </div>
+      </div>
+    `;
   }).join('');
   
   return `
     <div class="poll-card" data-poll-id="${poll.id}">
       <div class="poll-question">${escapeHtml(poll.question)}</div>
-      <div class="poll-options">
-        ${optionsHtml}
+      <div class="poll-chart-container">
+        ${chartHtml}
       </div>
       <div class="poll-total">${pollIsOpen ? deadline : `投票已截止 · ${deadline}`} · 共 ${results.total} 人投票</div>
     </div>
