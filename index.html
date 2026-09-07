@@ -45,6 +45,10 @@
           <span class="avatar avatar-an">安</span>
           <span class="member-count">3 人协作中</span>
         </div>
+        <button class="notification-btn" id="notification-btn" aria-label="通知">
+          🔔
+          <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+        </button>
         <button class="button button-ghost" id="invite-button">邀请成员</button>
         <button class="button button-ink" id="share-button">分享行程</button>
       </div>
@@ -149,6 +153,16 @@
     <a href="#decisions"><span>◌</span>决策</a>
     <a href="guide.html"><span>↗</span>攻略</a>
   </nav>
+
+  <div class="notification-panel" id="notification-panel" style="display: none;">
+    <div class="notification-header">
+      <h3>通知</h3>
+      <button class="notification-mark-all" id="mark-all-read">全部已读</button>
+    </div>
+    <div class="notification-list" id="notification-list">
+      <div class="notification-empty">暂无通知</div>
+    </div>
+  </div>
 
   <dialog id="invite-dialog">
     <button class="dialog-close" aria-label="关闭">×</button>

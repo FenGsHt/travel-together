@@ -197,6 +197,9 @@ async function init() {
   renderLibrary();
   render({ persist: false });
   autosaveEnabled = true;
+  
+  // 初始化通知系统
+  initNotifications();
 }
 
 // 启动初始化
@@ -881,6 +884,180 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('pagehide', () => {
   if (autosaveEnabled) projectAutosave.flush().catch((error) => console.error('Project autosave failed:', error));
 });
+
+// 通知系统
+let notificationPanel = null;
+let notificationBadge = null;
+let notificationList = null;
+
+function initNotifications() {
+  notificationPanel = document.getElementById('notification-panel');
+  notificationBadge = document.getElementById('notification-badge');
+  notificationList = document.getElementById('notification-list');
+  
+  const notificationBtn = document.getElementById('notification-btn');
+  const markAllReadBtn = document.getElementById('mark-all-read');
+  
+  // 切换通知面板显示
+  notificationBtn.addEventListener('click', () => {
+    if (notificationPanel.style.display === 'none') {
+      notificationPanel.style.display = 'block';
+      loadNotifications();
+    } else {
+      notificationPanel.style.display = 'none';
+    }
+  });
+  
+  // 全部标记已读
+  markAllReadBtn.addEventListener('click', markAllAsRead);
+  
+  // 点击页面其他区域关闭通知面板
+  document.addEventListener('click', (e) => {
+    if (!notificationPanel.contains(e.target) && !notificationBtn.contains(e.target)) {
+      notificationPanel.style.display = 'none';
+    }
+  });
+  
+  // 获取未读通知数量
+  updateNotificationBadge();
+  
+  // 监听 WebSocket 通知
+  if (realtimeClient && realtimeClient.socket) {
+    realtimeClient.socket.on('notification', (data) => {
+      updateNotificationBadge();
+      if (notificationPanel.style.display === 'block') {
+        loadNotifications();
+      }
+    });
+  }
+}
+
+async function updateNotificationBadge() {
+  try {
+    const response = await fetch('/api/notifications/unread-count', {
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const count = data.count || 0;
+      
+      if (count > 0) {
+        notificationBadge.textContent = count > 99 ? '99+' : count;
+        notificationBadge.style.display = 'block';
+      } else {
+        notificationBadge.style.display = 'none';
+      }
+    }
+  } catch (error) {
+    console.error('Failed to update notification badge:', error);
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const response = await fetch('/api/notifications', {
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      const notifications = await response.json();
+      renderNotifications(notifications);
+    }
+  } catch (error) {
+    console.error('Failed to load notifications:', error);
+  }
+}
+
+function renderNotifications(notifications) {
+  if (!notifications || notifications.length === 0) {
+    notificationList.innerHTML = '<div class="notification-empty">暂无通知</div>';
+    return;
+  }
+  
+  notificationList.innerHTML = notifications.map(notif => `
+    <div class="notification-item ${notif.read ? '' : 'unread'}" data-id="${notif.id}">
+      <div class="notification-title">${escapeHtml(notif.title)}</div>
+      <div class="notification-message">${escapeHtml(notif.message)}</div>
+      <div class="notification-time">${formatTime(notif.timestamp)}</div>
+    </div>
+  `).join('');
+  
+  // 绑定点击事件
+  notificationList.querySelectorAll('.notification-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const notifId = item.dataset.id;
+      markAsRead(notifId);
+    });
+  });
+}
+
+async function markAsRead(notifId) {
+  try {
+    const response = await fetch(`/api/notifications/${notifId}/read`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      // 更新 UI
+      const item = notificationList.querySelector(`[data-id="${notifId}"]`);
+      if (item) {
+        item.classList.remove('unread');
+      }
+      
+      // 更新徽章
+      updateNotificationBadge();
+    }
+  } catch (error) {
+    console.error('Failed to mark notification as read:', error);
+  }
+}
+
+async function markAllAsRead() {
+  try {
+    const response = await fetch('/api/notifications/read-all', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      // 更新 UI
+      notificationList.querySelectorAll('.notification-item').forEach(item => {
+        item.classList.remove('unread');
+      });
+      
+      // 更新徽章
+      updateNotificationBadge();
+    }
+  } catch (error) {
+    console.error('Failed to mark all notifications as read:', error);
+  }
+}
+
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diff = now - date;
+  
+  if (diff < 60000) { // 1 分钟内
+    return '刚刚';
+  } else if (diff < 3600000) { // 1 小时内
+    return `${Math.floor(diff / 60000)} 分钟前`;
+  } else if (diff < 86400000) { // 24 小时内
+    return `${Math.floor(diff / 3600000)} 小时前`;
+  } else if (diff < 604800000) { // 7 天内
+    return `${Math.floor(diff / 86400000)} 天前`;
+  } else {
+    return date.toLocaleDateString('zh-CN');
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 renderLibrary();
 render();
