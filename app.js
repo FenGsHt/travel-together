@@ -200,6 +200,9 @@ async function init() {
   
   // 初始化通知系统
   initNotifications();
+
+  // 数据恢复和 UI 就绪后再连接实时协作，避免远程事件覆盖未初始化状态。
+  initRealtime();
 }
 
 // 启动初始化
@@ -979,7 +982,7 @@ function renderNotifications(notifications) {
     <div class="notification-item ${notif.read ? '' : 'unread'}" data-id="${notif.id}">
       <div class="notification-title">${escapeHtml(notif.title)}</div>
       <div class="notification-message">${escapeHtml(notif.message)}</div>
-      <div class="notification-time">${formatTime(notif.timestamp)}</div>
+      <div class="notification-time">${formatTime(notif.createdAt)}</div>
     </div>
   `).join('');
   

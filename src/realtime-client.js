@@ -1,5 +1,3 @@
-import { io } from 'socket.io-client';
-
 class RealtimeClient {
   constructor() {
     this.socket = null;
@@ -23,10 +21,19 @@ class RealtimeClient {
     this.userId = userId;
     this.userName = userName;
 
-    // 连接到 WebSocket 服务器
-    const wsUrl = window.location.origin.replace(/^http/, 'ws');
-    this.socket = io(wsUrl, {
-      transports: ['websocket', 'polling']
+    // 静态站点由 index.html 通过 CDN 提供 Socket.IO 浏览器客户端。
+    if (typeof window.io !== 'function') {
+      console.error('Socket.IO 客户端未加载，实时协作不可用');
+      this.emit('connection_unavailable');
+      return;
+    }
+
+    this.socket = window.io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 8000,
     });
 
     // 连接成功
