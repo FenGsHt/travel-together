@@ -824,6 +824,80 @@ def get_unread_count():
     return jsonify({'count': unread})
 
 
+# ============== 评论通知 API ==============
+
+def notify_mentioned_users(project_id, comment_data, author_id):
+    """当评论中有 @提及时，通知被提及的用户"""
+    mentions = comment_data.get('mentions', [])
+    if not mentions:
+        return []
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return []
+    
+    # 获取项目成员列表
+    member_ids = [m['userId'] for m in project.get('members', [])]
+    
+    notifications = []
+    for mentioned_name in mentions:
+        # 查找被提及的用户
+        all_users = get_all_users()
+        mentioned_user = next((u for u in all_users if u['username'] == mentioned_name or u['displayName'] == mentioned_name), None)
+        
+        if mentioned_user and mentioned_user['id'] != author_id and mentioned_user['id'] in member_ids:
+            notif = create_notification(
+                mentioned_user['id'],
+                'mention',
+                f'{comment_data["author"]["name"]} 在评论中提到了你',
+                comment_data['content'][:100],  # 截取前100字符
+                project_id,
+                {
+                    'commentId': comment_data['id'],
+                    'timelineItemId': comment_data['timelineItemId'],
+                    'authorName': comment_data['author']['name']
+                }
+            )
+            notifications.append(notif)
+    
+    return notifications
+
+
+@app.route('/api/projects/<project_id>/comments', methods=['POST'])
+@require_auth
+def add_comment_with_notification(project_id):
+    """添加评论并触发通知"""
+    data = request.get_json(silent=True) or {}
+    user_id = session['user_id']
+    
+    # 获取用户信息
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    comment_data = {
+        'id': data.get('id'),
+        'timelineItemId': data.get('timelineItemId'),
+        'content': data.get('content', ''),
+        'author': {
+            'id': user_id,
+            'name': user['displayName']
+        },
+        'mentions': data.get('mentions', []),
+        'createdAt': datetime.now().isoformat()
+    }
+    
+    # 创建通知（通知被 @提及的用户）
+    notifications = notify_mentioned_users(project_id, comment_data, user_id)
+    
+    return jsonify({
+        'success': True,
+        'comment': comment_data,
+        'notifications_sent': len(notifications)
+    })
+
+
 # ============== 健康检查 ==============
 
 @app.route('/api/health', methods=['GET'])
