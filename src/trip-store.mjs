@@ -213,13 +213,22 @@ export function createTripStore() {
       return structuredClone(poll);
     },
 
-    vote({ pollId, voter, choice }) {
+    vote({ pollId, voter, choice, comment }) {
       requireMember(voter);
       const poll = findPoll(pollId);
       if (!pollIsOpen(poll)) throw new Error('Poll has ended');
       if (!poll.options.includes(choice)) throw new Error('Poll option not found');
       checkpoint();
       poll.votes[voter.id] = choice;
+      if (comment && typeof comment === 'string' && comment.trim()) {
+        if (!poll.comments) poll.comments = [];
+        poll.comments.push({
+          voterId: voter.id,
+          voterName: voter.name,
+          comment: comment.trim(),
+          timestamp: new Date().toISOString()
+        });
+      }
       record('poll.voted', voter, { pollId, choice });
       return structuredClone(poll);
     },

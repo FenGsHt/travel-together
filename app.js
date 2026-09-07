@@ -348,7 +348,8 @@ function createTimelineCard(item) {
     btn.addEventListener('click', () => {
       const pollId = btn.dataset.pollId;
       const choice = btn.dataset.choice;
-      store.vote({ pollId, voter: editor, choice });
+      const comment = prompt('添加投票评论（可选）：');
+      store.vote({ pollId, voter: editor, choice, comment: comment || undefined });
       render();
     });
   });
@@ -392,6 +393,17 @@ function renderPollCard(poll) {
         ${chartHtml}
       </div>
       <div class="poll-total">${pollIsOpen ? deadline : `投票已截止 · ${deadline}`} · 共 ${results.total} 人投票</div>
+      ${poll.comments && poll.comments.length ? `
+        <div class="poll-comments">
+          <div class="poll-comments-title">投票评论 (${poll.comments.length})</div>
+          ${poll.comments.slice(-5).map(c => `
+            <div class="poll-comment">
+              <strong>${escapeHtml(c.voterName)}</strong>: ${escapeHtml(c.comment)}
+            </div>
+          `).join('')}
+          ${poll.comments.length > 5 ? `<div class="poll-comments-more">还有 ${poll.comments.length - 5} 条评论</div>` : ''}
+        </div>
+      ` : ''}
     </div>
   `;
 }
