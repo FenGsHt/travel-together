@@ -286,17 +286,27 @@ export function createTripStore() {
       requireMember(author);
       if (!content?.trim()) throw new Error('Comment content cannot be empty');
       checkpoint();
+      
+      // 解析 @提及
+      const mentions = [];
+      const mentionRegex = /@(\w+)/g;
+      let match;
+      while ((match = mentionRegex.exec(content)) !== null) {
+        mentions.push(match[1]);
+      }
+      
       const comment = {
         id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         timelineItemId,
         content: content.trim(),
         author: { id: author.id, name: author.name },
+        mentions,
         likes: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       state.comments.push(comment);
-      record('comment.added', author, { commentId: comment.id, timelineItemId });
+      record('comment.added', author, { commentId: comment.id, timelineItemId, mentions });
       return structuredClone(comment);
     },
 

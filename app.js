@@ -284,13 +284,25 @@ function createTimelineCard(item) {
       return;
     }
     
-    commentsList.innerHTML = comments.map(comment => `
+    commentsList.innerHTML = comments.map(comment => {
+      // 高亮 @提及
+      const highlightedContent = comment.content.replace(
+        /@(\w+)/g,
+        '<span class="mention">@$1</span>'
+      );
+      
+      return `
       <div class="comment-item" data-comment-id="${comment.id}">
         <div class="comment-header">
           <span class="comment-author">${escapeHtml(comment.author.name)}</span>
           <span class="comment-time">${new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
         </div>
-        <div class="comment-content">${escapeHtml(comment.content)}</div>
+        <div class="comment-content">${highlightedContent}</div>
+        ${comment.mentions && comment.mentions.length > 0 ? `
+          <div class="comment-mentions">
+            提及: ${comment.mentions.map(m => `<span class="mention-tag">@${escapeHtml(m)}</span>`).join(' ')}
+          </div>
+        ` : ''}
         <div class="comment-actions">
           <button class="like-btn" data-comment-id="${comment.id}">
             👍 ${comment.likes.length > 0 ? comment.likes.length : ''}
@@ -301,7 +313,7 @@ function createTimelineCard(item) {
           ` : ''}
         </div>
       </div>
-    `).join('');
+    `}).join('');
     
     // 绑定评论操作事件
     commentsList.querySelectorAll('.like-btn').forEach(btn => {
