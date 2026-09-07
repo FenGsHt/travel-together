@@ -33,6 +33,7 @@ DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 PROJECTS_FILE = DATA_DIR / "projects.json"
 PROJECTS_LOCK_FILE = DATA_DIR / "projects.lock"
+NOTIFICATIONS_FILE = DATA_DIR / "notifications.json"
 
 # 访问令牌（从环境变量读取）
 SITE_ACCESS_TOKEN = os.getenv('SITE_ACCESS_TOKEN', '')
@@ -716,6 +717,111 @@ def ai_get_summary(project_id):
     }
     
     return jsonify(summary)
+
+
+# ============== 通知系统 API ==============
+
+def load_notifications():
+    """加载通知数据"""
+    if NOTIFICATIONS_FILE.exists():
+        with open(NOTIFICATIONS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def save_notifications(notifications):
+    """保存通知数据"""
+    with open(NOTIFICATIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(notifications, f, ensure_ascii=False, indent=2)
+
+
+def create_notification(user_id, type, title, message, project_id=None, data=None):
+    """创建通知"""
+    notifications = load_notifications()
+    notification = {
+        'id': f"notif_{int(datetime.now().timestamp() * 1000)}",
+        'userId': user_id,
+        'type': type,
+        'title': title,
+        'message': message,
+        'projectId': project_id,
+        'data': data or {},
+        'read': False,
+        'createdAt': datetime.now().isoformat()
+    }
+    notifications.append(notification)
+    save_notifications(notifications)
+    return notification
+
+
+def notify_project_members(project_id, type, title, message, exclude_user_id=None, data=None):
+    """通知项目所有成员"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return []
+    
+    notifications = []
+    for member in project.get('members', []):
+        if member['userId'] != exclude_user_id:
+            notif = create_notification(
+                member['userId'], type, title, message, project_id, data
+            )
+            notifications.append(notif)
+    return notifications
+
+
+@app.route('/api/notifications', methods=['GET'])
+@require_auth
+def get_notifications():
+    """获取当前用户的通知"""
+    user_id = session['user_id']
+    notifications = load_notifications()
+    user_notifs = [n for n in notifications if n['userId'] == user_id]
+    # 按时间倒序，最多返回 50 条
+    user_notifs.sort(key=lambda x: x['createdAt'], reverse=True)
+    return jsonify(user_notifs[:50])
+
+
+@app.route('/api/notifications/<notif_id>/read', methods=['POST'])
+@require_auth
+def mark_notification_read(notif_id):
+    """标记通知为已读"""
+    user_id = session['user_id']
+    notifications = load_notifications()
+    
+    for notif in notifications:
+        if notif['id'] == notif_id and notif['userId'] == user_id:
+            notif['read'] = True
+            save_notifications(notifications)
+            return jsonify({'success': True})
+    
+    return jsonify({'error': '通知不存在'}), 404
+
+
+@app.route('/api/notifications/read-all', methods=['POST'])
+@require_auth
+def mark_all_notifications_read():
+    """标记所有通知为已读"""
+    user_id = session['user_id']
+    notifications = load_notifications()
+    
+    for notif in notifications:
+        if notif['userId'] == user_id:
+            notif['read'] = True
+    
+    save_notifications(notifications)
+    return jsonify({'success': True})
+
+
+@app.route('/api/notifications/unread-count', methods=['GET'])
+@require_auth
+def get_unread_count():
+    """获取未读通知数量"""
+    user_id = session['user_id']
+    notifications = load_notifications()
+    unread = sum(1 for n in notifications if n['userId'] == user_id and not n['read'])
+    return jsonify({'count': unread})
 
 
 # ============== 健康检查 ==============
