@@ -3,6 +3,7 @@ import { travelBlocks } from './src/travel-blocks.mjs';
 import * as api from './src/api-client.mjs';
 import { createProjectAutosave } from './src/project-autosave.mjs';
 import { findTimeConflicts } from './src/timeline-conflicts.mjs';
+import { realtimeClient } from './src/realtime-client.js';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
@@ -200,6 +201,77 @@ async function init() {
 
 // 启动初始化
 init();
+
+// 初始化实时协作
+function initRealtime() {
+  if (!currentProjectId || !editor.id) return;
+  
+  // 连接 WebSocket
+  realtimeClient.connect(currentProjectId, editor.id, editor.name);
+  
+  // 监听远程编辑
+  realtimeClient.on('remote_edit', (data) => {
+    console.log('收到远程编辑:', data);
+    // 重新加载项目数据
+    loadProject().then(() => {
+      render();
+      // 显示操作通知
+      showRemoteAction(data);
+    });
+  });
+  
+  // 监听用户加入
+  realtimeClient.on('user_joined', (data) => {
+    console.log('用户加入:', data);
+    showNotification(`${data.user_name} 加入了项目`);
+  });
+  
+  // 监听用户离开
+  realtimeClient.on('user_left', (data) => {
+    console.log('用户离开:', data);
+    showNotification(`${data.user_name} 离开了项目`);
+  });
+}
+
+// 广播编辑操作
+function broadcastEdit(action, data) {
+  realtimeClient.broadcastEdit(action, data);
+}
+
+// 显示远程操作通知
+function showRemoteAction(data) {
+  const message = `${data.user_name} ${getActionText(data.action)}`;
+  showNotification(message);
+}
+
+function getActionText(action) {
+  const actionMap = {
+    'add_block': '添加了旅行块',
+    'remove_block': '删除了旅行块',
+    'add_timeline': '添加了行程',
+    'remove_timeline': '删除了行程',
+    'move_timeline': '移动了行程',
+    'edit_timeline': '编辑了行程',
+    'add_poll': '创建了投票',
+    'vote': '参与了投票',
+    'add_comment': '添加了评论'
+  };
+  return actionMap[action] || '进行了操作';
+}
+
+function showNotification(message) {
+  // 创建通知元素
+  const notification = document.createElement('div');
+  notification.className = 'realtime-notification';
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  // 2秒后移除
+  setTimeout(() => {
+    notification.classList.add('fade-out');
+    setTimeout(() => notification.remove(), 500);
+  }, 2000);
+}
 
 function saveProjectData() {
   projectAutosave.schedule(store.snapshot());

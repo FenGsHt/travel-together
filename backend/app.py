@@ -15,6 +15,7 @@ from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from pathlib import Path
 from user_manager import create_user, authenticate_user, get_user_by_id, get_all_users
+from websocket_handler import init_socketio, broadcast_edit
 
 app = Flask(__name__)
 
@@ -913,4 +914,10 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    
+    # 初始化 WebSocket
+    init_socketio(app)
+    
+    # 使用 socketio 启动，支持 WebSocket
+    from websocket_handler import socketio
+    socketio.run(app, host='0.0.0.0', port=port, debug=debug)
