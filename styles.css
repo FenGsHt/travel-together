@@ -151,6 +151,23 @@ dialog { width: min(400px, calc(100vw - 32px)); padding: 26px; border: 0; border
 .map-info-window .info-time { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
 .map-info-window .info-coords { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; }
 
+/* 分支路线 */
+.branch-group { border: 1px solid #d0e4d8; border-radius: 8px; padding: 10px 12px; background: #f8faf9; margin-bottom: 8px; }
+.branch-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 11px; color: var(--green); font-weight: 600; }
+.branch-icon { font-size: 14px; }
+.branch-label { flex: 1; }
+.branch-voted { color: var(--muted); font-weight: 400; }
+.branch-options { display: flex; flex-direction: column; gap: 6px; }
+.branch-option { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border-radius: 6px; border: 1px solid var(--line); }
+.branch-option.branch-winner { border-color: var(--green); background: var(--green-soft); }
+.branch-letter { width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.branch-name { font-size: 13px; font-weight: 600; flex: 1; }
+.branch-price { font-size: 10px; color: var(--terracotta); background: #fdf0ec; padding: 1px 5px; border-radius: 3px; }
+.branch-vote-btn { width: 100%; margin-top: 8px; padding: 6px; border: 1px dashed var(--green); background: transparent; color: var(--green); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.branch-vote-btn:hover { background: var(--green-soft); }
+.branch-btn { padding: 4px 8px; font-size: 11px; border: 1px dashed var(--line); border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; margin-left: 4px; }
+.branch-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+
 /* 地图选点弹窗 */
 .location-picker-dialog { width: min(600px, calc(100vw - 32px)); }
 .location-picker-search { display: flex; gap: 8px; margin: 10px 0; }

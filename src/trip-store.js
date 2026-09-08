@@ -2,6 +2,7 @@ export function createTripStore() {
   let blockSequence = 0;
   let timelineSequence = 0;
   let pollSequence = 0;
+  let branchSequence = 0;
   const state = {
     blocks: [],
     timeline: [],
@@ -22,13 +23,13 @@ export function createTripStore() {
   function capture() {
     return structuredClone({
       state,
-      sequences: { blockSequence, timelineSequence, pollSequence },
+      sequences: { blockSequence, timelineSequence, pollSequence, branchSequence },
     });
   }
 
   function restore(snapshot) {
     Object.assign(state, structuredClone(snapshot.state));
-    ({ blockSequence, timelineSequence, pollSequence } = snapshot.sequences);
+    ({ blockSequence, timelineSequence, pollSequence, branchSequence } = snapshot.sequences);
   }
 
   function checkpoint() {
@@ -235,6 +236,79 @@ export function createTripStore() {
       });
       record('timeline.reordered', editor, { timelineId: item.id, day, newIndex });
       return structuredClone(item);
+    },
+
+    createBranch({ day, time, blockIds, editor }) {
+      requireMember(editor);
+      if (!Array.isArray(blockIds) || blockIds.length < 2) {
+        throw new Error('A branch needs at least two options');
+      }
+      const branchGroup = `branch-${++branchSequence}`;
+      checkpoint();
+      const items = [];
+      for (const blockId of blockIds) {
+        const block = findBlock(blockId);
+        const item = {
+          id: `timeline-${++timelineSequence}`,
+          blockId: block.id,
+          name: block.name,
+          image: block.image,
+          day: Number(day),
+          time,
+          note: '',
+          branchGroup,
+          branchStatus: 'pending',
+        };
+        if (block.lat != null && block.lng != null) {
+          item.lat = block.lat;
+          item.lng = block.lng;
+        }
+        if (block.description) item.description = block.description;
+        if (block.price) item.price = block.price;
+        if (block.category) item.category = block.category;
+        state.timeline.push(item);
+        items.push(structuredClone(item));
+      }
+      record('branch.created', editor, { branchGroup, blockIds });
+      return items;
+    },
+
+    resolveBranch({ branchGroup, selectedTimelineId, editor }) {
+      requireMember(editor);
+      const branchItems = state.timeline.filter(t => t.branchGroup === branchGroup);
+      if (branchItems.length === 0) throw new Error('Branch group not found');
+      checkpoint();
+      branchItems.forEach(item => {
+        item.branchStatus = item.id === selectedTimelineId ? 'selected' : 'rejected';
+      });
+      record('branch.resolved', editor, { branchGroup, selectedTimelineId });
+      return branchItems.map(item => structuredClone(item));
+    },
+
+    removeFromBranch({ timelineId, editor }) {
+      requireMember(editor);
+      const item = state.timeline.find(t => t.id === timelineId);
+      if (!item || !item.branchGroup) throw new Error('Item is not in a branch');
+      checkpoint();
+      const branchGroup = item.branchGroup;
+      state.timeline = state.timeline.filter(t => t.id !== timelineId);
+      // 如果分支只剩一个选项，取消分支
+      const remaining = state.timeline.filter(t => t.branchGroup === branchGroup);
+      if (remaining.length <= 1) {
+        remaining.forEach(t => { delete t.branchGroup; delete t.branchStatus; });
+      }
+      record('branch.item_removed', editor, { timelineId, branchGroup });
+      return true;
+    },
+
+    removeTimelineItem({ timelineId, editor }) {
+      requireMember(editor);
+      const index = state.timeline.findIndex(t => t.id === timelineId);
+      if (index === -1) throw new Error('Timeline item not found');
+      checkpoint();
+      state.timeline.splice(index, 1);
+      record('timeline.deleted', editor, { timelineId });
+      return true;
     },
 
     createPoll({ question, timelineItemId, creator, options, deadlineAt }) {

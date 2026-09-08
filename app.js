@@ -480,6 +480,7 @@ function createTimelineCard(item) {
       <input class="note" aria-label="${noteAriaLabel}" value="${safeNote}" placeholder="添加同行备注">
       ${locationInfo}
       <button class="pick-location-btn" type="button">📍 选择位置</button>
+      <button class="branch-btn" type="button" title="添加分支选项"> 分叉</button>
       ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
       <div class="comments-section" data-timeline-id="${escapeHtml(item.id)}">
@@ -513,6 +514,37 @@ function createTimelineCard(item) {
       render();
     }
   });
+
+  // 分叉按钮
+  const branchBtn = card.querySelector('.branch-btn');
+  if (branchBtn) {
+    branchBtn.addEventListener('click', () => {
+      if (item.branchGroup) {
+        if (confirm('确定移除此分支选项？')) {
+          store.removeFromBranch({ timelineId: item.id, editor });
+          render();
+        }
+        return;
+      }
+      const blocks = store.snapshot().blocks;
+      const choice = prompt(
+        `选择分支选项（输入序号）：\n${blocks.map((b, i) => `${i + 1}. ${b.name}`).join('\n')}`
+      );
+      const idx = parseInt(choice) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= blocks.length) return;
+      const otherBlock = blocks[idx];
+      const oldId = item.id;
+      store.createBranch({
+        day: item.day,
+        time: item.time,
+        blockIds: [item.blockId, otherBlock.id],
+        editor,
+      });
+      // 删除原来的独立项
+      store.removeTimelineItem({ timelineId: oldId, editor });
+      render();
+    });
+  }
 
   // 渲染评论
   const renderComments = () => {
@@ -745,6 +777,50 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function createBranchCard(items) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'branch-group';
+  const poll = store.snapshot().polls.find(p => p.timelineItemId === items[0].id);
+  const hasPoll = !!poll;
+  const winnerId = poll?.votes ? Object.entries(poll.votes).reduce((acc, [, vote]) => {
+    acc[vote] = (acc[vote] || 0) + 1;
+    return acc;
+  }, {}) : {};
+
+  wrapper.innerHTML = `
+    <div class="branch-header">
+      <span class="branch-icon">🔀</span>
+      <span class="branch-label">路线选项（${items.length} 选 1）</span>
+      ${hasPoll ? '<span class="branch-voted">已投票</span>' : ''}
+    </div>
+    <div class="branch-options">
+      ${items.map((item, i) => {
+        const isWinner = winnerId[item.name] && Object.values(winnerId).reduce((a, b) => Math.max(a, b), 0) === winnerId[item.name];
+        return `
+          <div class="branch-option ${isWinner ? 'branch-winner' : ''}">
+            <span class="branch-letter">${String.fromCharCode(65 + i)}</span>
+            <span class="branch-name">${escapeHtml(item.name)}</span>
+            ${item.price ? `<span class="branch-price">${escapeHtml(item.price)}</span>` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+    ${!hasPoll ? `<button class="branch-vote-btn" data-branch-group="${escapeHtml(items[0].branchGroup)}">发起投票决定</button>` : ''}
+  `;
+
+  const voteBtn = wrapper.querySelector('.branch-vote-btn');
+  if (voteBtn) {
+    voteBtn.addEventListener('click', () => {
+      const question = `路线选择：${items.map(i => i.name).join(' 还是 ')}`;
+      const options = items.map(i => i.name);
+      store.createPoll({ question, timelineItemId: items[0].id, creator: editor, options });
+      render();
+    });
+  }
+
+  return wrapper;
+}
+
 function renderTimeline() {
   timeline.replaceChildren();
   const template = document.querySelector('#timeline-day-template');
@@ -759,7 +835,21 @@ function renderTimeline() {
     fragment.querySelector('h3').textContent = day.title;
     column.id = `day-${day.id}`;
 
-    for (const item of timelineItemsFor(day.id)) items.append(createTimelineCard(item));
+    const dayItems = timelineItemsFor(day.id);
+    const rendered = new Set();
+
+    for (const item of dayItems) {
+      if (rendered.has(item.id)) continue;
+
+      if (item.branchGroup) {
+        // 渲染分支组
+        const branchItems = dayItems.filter(t => t.branchGroup === item.branchGroup);
+        branchItems.forEach(t => rendered.add(t.id));
+        items.append(createBranchCard(branchItems));
+      } else {
+        items.append(createTimelineCard(item));
+      }
+    }
 
     dropZone.addEventListener('dragover', (event) => {
       event.preventDefault();
