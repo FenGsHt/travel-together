@@ -458,9 +458,11 @@ function createTimelineCard(item) {
 
   card.innerHTML = `
     <img src="${item.image}" alt="${item.name}">
-    <input aria-label="${item.name} 的时间" type="time" value="${item.time}">
-    <div>
+    <div class="card-header">
+      <input aria-label="${item.name} 的时间" type="time" value="${item.time}">
       <div class="name">${item.name}</div>
+    </div>
+    <div>
       <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
       ${locationInfo}
       <button class="pick-location-btn" type="button">📍 选择位置</button>
