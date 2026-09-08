@@ -526,23 +526,41 @@ function createTimelineCard(item) {
         }
         return;
       }
-      const blocks = store.snapshot().blocks;
-      const choice = prompt(
-        `选择分支选项（输入序号）：\n${blocks.map((b, i) => `${i + 1}. ${b.name}`).join('\n')}`
-      );
-      const idx = parseInt(choice) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= blocks.length) return;
-      const otherBlock = blocks[idx];
-      const oldId = item.id;
-      store.createBranch({
-        day: item.day,
-        time: item.time,
-        blockIds: [item.blockId, otherBlock.id],
-        editor,
+      // 打开分支选择对话框
+      const dialog = document.getElementById('branch-dialog');
+      const list = document.getElementById('branch-block-list');
+      const blocks = store.snapshot().blocks.filter(b => b.id !== item.blockId);
+
+      list.innerHTML = blocks.length === 0
+        ? '<p style="color:var(--muted);text-align:center;padding:20px;">没有其他旅行块，请先添加</p>'
+        : blocks.map((b, i) => `
+          <div class="branch-block-option" data-block-id="${escapeHtml(b.id)}">
+            <img src="${escapeHtml(b.image)}" alt="" style="width:36px;height:32px;object-fit:cover;border-radius:4px;">
+            <div>
+              <strong style="font-size:13px;">${escapeHtml(b.name)}</strong>
+              ${b.category ? `<small style="color:var(--muted);font-size:10px;">${escapeHtml(b.category)}</small>` : ''}
+              ${b.price ? `<small style="color:var(--terracotta);font-size:10px;">${escapeHtml(b.price)}</small>` : ''}
+            </div>
+          </div>
+        `).join('');
+
+      list.querySelectorAll('.branch-block-option').forEach(el => {
+        el.addEventListener('click', () => {
+          const blockId = el.dataset.blockId;
+          const oldId = item.id;
+          store.createBranch({
+            day: item.day,
+            time: item.time,
+            blockIds: [item.blockId, blockId],
+            editor,
+          });
+          store.removeTimelineItem({ timelineId: oldId, editor });
+          dialog.close();
+          render();
+        });
       });
-      // 删除原来的独立项
-      store.removeTimelineItem({ timelineId: oldId, editor });
-      render();
+
+      dialog.showModal();
     });
   }
 
