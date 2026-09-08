@@ -189,7 +189,12 @@
   <dialog id="location-picker-dialog" class="location-picker-dialog">
     <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
     <p class="eyebrow">选择位置</p>
-    <h2>在地图上点击选择坐标</h2>
+    <h2>搜索或点击地图选择坐标</h2>
+    <div class="location-picker-search">
+      <input type="text" id="location-search-input" placeholder="搜索地点，如：建水古城">
+      <button class="button button-ink" id="location-search-btn" type="button">搜索</button>
+    </div>
+    <div class="location-search-results" id="location-search-results"></div>
     <div class="location-picker-map" id="location-picker-map"></div>
     <div class="location-picker-info" id="location-picker-info">
       点击地图选择位置
@@ -231,7 +236,7 @@
     </article>
   </template>
 
-  <script src="https://webapi.amap.com/maps?v=2.0&key=8fbe29f9df06d4b82738fafcb5155bef"></script>
+  <script src="https://webapi.amap.com/maps?v=2.0&key=8fbe29f9df06d4b82738fafcb5155bef&plugin=AMap.PlaceSearch"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

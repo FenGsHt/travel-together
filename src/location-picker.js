@@ -1,8 +1,10 @@
 // 地图选点弹窗模块
-// 在 dialog 中嵌入高德地图，用户点击地图选择坐标
+// 在 dialog 中嵌入高德地图，支持地点搜索和点击选点
 
 let pickerMap = null;
 let pickerMarker = null;
+let searchMarkers = [];
+let placeSearch = null;
 let selectedLocation = null;
 let resolvePicker = null;
 
@@ -11,6 +13,9 @@ const MAP_CONTAINER_ID = 'location-picker-map';
 const INFO_ID = 'location-picker-info';
 const CONFIRM_ID = 'location-picker-confirm';
 const CLEAR_ID = 'location-picker-clear';
+const SEARCH_INPUT_ID = 'location-search-input';
+const SEARCH_BTN_ID = 'location-search-btn';
+const RESULTS_ID = 'location-search-results';
 
 /**
  * 打开地图选点弹窗
@@ -24,15 +29,21 @@ export function openLocationPicker(existingLat = null, existingLng = null) {
     selectedLocation = null;
 
     const dialog = document.getElementById(DIALOG_ID);
-    const info = document.getElementById(INFO_ID);
     const confirmBtn = document.getElementById(CONFIRM_ID);
     const clearBtn = document.getElementById(CLEAR_ID);
+    const searchInput = document.getElementById(SEARCH_INPUT_ID);
+    const searchBtn = document.getElementById(SEARCH_BTN_ID);
+    const resultsContainer = document.getElementById(RESULTS_ID);
 
     if (!dialog) {
       console.error('Location picker dialog not found');
       resolve(null);
       return;
     }
+
+    // 重置搜索框
+    if (searchInput) searchInput.value = '';
+    if (resultsContainer) resultsContainer.innerHTML = '';
 
     // 打开弹窗
     dialog.showModal();
@@ -42,20 +53,37 @@ export function openLocationPicker(existingLat = null, existingLng = null) {
       initPickerMap(existingLat, existingLng);
     });
 
-    // 绑定按钮事件
+    // 搜索按钮
+    searchBtn.onclick = () => {
+      const keyword = searchInput.value.trim();
+      if (keyword) searchPlace(keyword);
+    };
+
+    // 回车搜索
+    searchInput.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const keyword = searchInput.value.trim();
+        if (keyword) searchPlace(keyword);
+      }
+    };
+
+    // 确认按钮
     confirmBtn.onclick = () => {
       dialog.close();
       cleanupPicker();
       resolve(selectedLocation);
     };
 
+    // 清除按钮
     clearBtn.onclick = () => {
       selectedLocation = null;
       if (pickerMarker) {
         pickerMarker.setMap(null);
         pickerMarker = null;
       }
-      info.textContent = '点击地图选择位置';
+      const info = document.getElementById(INFO_ID);
+      if (info) info.textContent = '点击地图选择位置';
       confirmBtn.disabled = true;
     };
 
@@ -97,6 +125,12 @@ function initPickerMap(existingLat, existingLng) {
     resizeEnable: true,
   });
 
+  // 初始化地点搜索
+  placeSearch = new AMap.PlaceSearch({
+    pageSize: 8,
+    map: pickerMap,
+  });
+
   // 如果有已有坐标，放置标记
   if (existingLat && existingLng) {
     placeMarker(existingLat, existingLng);
@@ -106,12 +140,76 @@ function initPickerMap(existingLat, existingLng) {
 
   // 地图点击事件
   pickerMap.on('click', (e) => {
+    clearSearchResults();
     const lat = e.lnglat.getLat();
     const lng = e.lnglat.getLng();
     placeMarker(lat, lng);
     updateInfo(lat, lng);
     document.getElementById(CONFIRM_ID).disabled = false;
   });
+}
+
+function searchPlace(keyword) {
+  if (!placeSearch) return;
+
+  clearSearchResults();
+  clearSearchMarkers();
+
+  const resultsContainer = document.getElementById(RESULTS_ID);
+
+  placeSearch.search(keyword, (status, result) => {
+    if (status !== 'complete' || !result.poiList) {
+      resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
+      return;
+    }
+
+    const pois = result.poiList.pois;
+    if (pois.length === 0) {
+      resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
+      return;
+    }
+
+    resultsContainer.innerHTML = pois.map((poi, index) => `
+      <div class="search-result-item" data-index="${index}">
+        <span class="result-name">${escapeHtml(poi.name)}</span>
+        <span class="result-address">${escapeHtml(poi.address || '')}</span>
+      </div>
+    `).join('');
+
+    // 绑定点击事件
+    resultsContainer.querySelectorAll('.search-result-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.index);
+        const poi = pois[idx];
+        const lng = parseFloat(poi.location.lng);
+        const lat = parseFloat(poi.location.lat);
+
+        placeMarker(lat, lng);
+        updateInfo(lat, lng, poi.name);
+        document.getElementById(CONFIRM_ID).disabled = false;
+
+        // 高亮选中
+        resultsContainer.querySelectorAll('.search-result-item').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+
+        // 在地图上添加搜索标记
+        addSearchMarker(lat, lng, poi.name);
+      });
+    });
+  });
+}
+
+function addSearchMarker(lat, lng, name) {
+  // eslint-disable-next-line no-undef
+  const AMap = window.AMap;
+  if (!pickerMap || !AMap) return;
+
+  const marker = new AMap.Marker({
+    position: new AMap.LngLat(lng, lat),
+    title: name,
+  });
+  marker.setMap(pickerMap);
+  searchMarkers.push(marker);
 }
 
 function placeMarker(lat, lng) {
@@ -124,7 +222,6 @@ function placeMarker(lat, lng) {
     pickerMarker.setMap(null);
   }
 
-  // 创建新标记
   const markerContent = document.createElement('div');
   markerContent.className = 'picker-marker';
   markerContent.innerHTML = '<div class="picker-pin">📍</div>';
@@ -139,11 +236,23 @@ function placeMarker(lat, lng) {
   selectedLocation = { lat, lng };
 }
 
-function updateInfo(lat, lng) {
+function updateInfo(lat, lng, name) {
   const info = document.getElementById(INFO_ID);
   if (info) {
-    info.textContent = `纬度: ${lat.toFixed(6)}, 经度: ${lng.toFixed(6)}`;
+    info.textContent = name
+      ? `${name} — ${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      : `纬度: ${lat.toFixed(6)}, 经度: ${lng.toFixed(6)}`;
   }
+}
+
+function clearSearchResults() {
+  const container = document.getElementById(RESULTS_ID);
+  if (container) container.innerHTML = '';
+}
+
+function clearSearchMarkers() {
+  searchMarkers.forEach(m => m.setMap(null));
+  searchMarkers = [];
 }
 
 function cleanupPicker() {
@@ -152,6 +261,14 @@ function cleanupPicker() {
     pickerMap = null;
   }
   pickerMarker = null;
+  searchMarkers = [];
+  placeSearch = null;
   selectedLocation = null;
   resolvePicker = null;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
