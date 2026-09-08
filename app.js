@@ -4,12 +4,16 @@ import * as api from './src/api-client.mjs';
 import { createProjectAutosave } from './src/project-autosave.mjs';
 import { findTimeConflicts } from './src/timeline-conflicts.mjs';
 import { realtimeClient } from './src/realtime-client.js';
+import { initMap, addMarkers, destroyMap } from './src/map-view.mjs';
+import { openLocationPicker } from './src/location-picker.mjs';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
 let currentProject = null;
 let autosaveEnabled = false;
 let pendingConflictSnapshot = null;
+let currentView = 'timeline'; // 'timeline' | 'map'
+let mapViewInitialized = false;
 
 const projectAutosave = createProjectAutosave({
   delay: 500,
@@ -455,12 +459,18 @@ function createTimelineCard(item) {
     ? `<p class="time-conflict" role="alert">时间冲突：${timeConflicts.map((conflict) => conflict.name).join('、')} 也安排在 ${item.time}</p>`
     : '';
   
+  const locationInfo = item.lat != null && item.lng != null
+    ? `<div class="location-info" title="${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}">📍 ${item.lat.toFixed(3)}, ${item.lng.toFixed(3)}</div>`
+    : '';
+
   card.innerHTML = `
     <img src="${item.image}" alt="${item.name}">
     <input aria-label="${item.name} 的时间" type="time" value="${item.time}">
     <div>
       <div class="name">${item.name}</div>
       <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
+      ${locationInfo}
+      <button class="pick-location-btn" type="button">📍 选择位置</button>
       ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
       <div class="comments-section" data-timeline-id="${item.id}">
@@ -479,6 +489,20 @@ function createTimelineCard(item) {
   noteInput.addEventListener('change', () => {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
     render();
+  });
+
+  // 地图选点
+  card.querySelector('.pick-location-btn').addEventListener('click', async () => {
+    const location = await openLocationPicker(item.lat || null, item.lng || null);
+    if (location) {
+      store.editTimelineItem({
+        timelineId: item.id,
+        lat: location.lat,
+        lng: location.lng,
+        editor,
+      });
+      render();
+    }
   });
 
   // 渲染评论
@@ -832,7 +856,59 @@ function render({ persist = autosaveEnabled } = {}) {
   renderTimeline();
   renderActivity();
   renderAiDrafts();
+  if (currentView === 'map') renderMapView();
   if (persist) saveProjectData();
+}
+
+function switchView(view) {
+  currentView = view;
+  const timeline = document.getElementById('timeline');
+  const mapContainer = document.getElementById('map-container');
+  const helper = document.querySelector('.itinerary .helper');
+  const viewButtons = document.querySelectorAll('.view-switch button');
+
+  viewButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+
+  if (view === 'timeline') {
+    timeline.style.display = '';
+    mapContainer.style.display = 'none';
+    if (helper) helper.style.display = '';
+    destroyMap();
+    mapViewInitialized = false;
+  } else if (view === 'map') {
+    timeline.style.display = 'none';
+    mapContainer.style.display = '';
+    if (helper) helper.style.display = 'none';
+    renderMapView();
+  }
+}
+
+function renderMapView() {
+  const mapContainer = document.getElementById('map-container');
+  if (!mapContainer) return;
+
+  // 收集所有有坐标的行程项
+  const items = store.snapshot().timeline.filter(i => i.lat != null && i.lng != null);
+
+  if (!mapViewInitialized) {
+    initMap('map-canvas');
+    mapViewInitialized = true;
+  }
+
+  addMarkers(items, (item) => {
+    // 点击标记后切换回时间线并滚动到该卡片
+    switchView('timeline');
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-timeline-id="${item.id}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('highlight');
+        setTimeout(() => card.classList.remove('highlight'), 2000);
+      }
+    });
+  });
 }
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
@@ -854,6 +930,11 @@ document.querySelector('#copy-invite').addEventListener('click', async (event) =
   event.target.textContent = '已复制';
 });
 document.querySelector('#share-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
+
+// 视图切换：时间线 / 地图
+document.querySelectorAll('.view-switch button[data-view]').forEach((btn) => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
 document.querySelector('#add-block').addEventListener('click', () => alert('MVP 下一步：上传图片并创建自定义旅行块。'));
 document.querySelector('#ai-import').addEventListener('click', () => {
   const source = aiSourceInput.value.trim();

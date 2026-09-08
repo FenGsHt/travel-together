@@ -87,7 +87,7 @@ export function createTripStore() {
   }
 
   return {
-    createTravelBlock({ name, image }) {
+    createTravelBlock({ name, image, lat, lng }) {
       if (!name?.trim() || !image?.trim()) {
         throw new Error('A travel block needs a name and image');
       }
@@ -97,6 +97,10 @@ export function createTripStore() {
         name: name.trim(),
         image: image.trim(),
       };
+      if (lat != null && lng != null) {
+        block.lat = Number(lat);
+        block.lng = Number(lng);
+      }
       state.blocks.push(block);
       return structuredClone(block);
     },
@@ -147,6 +151,11 @@ export function createTripStore() {
         time,
         note: '',
       };
+      // 如果旅行块有坐标，继承到行程项
+      if (block.lat != null && block.lng != null) {
+        item.lat = block.lat;
+        item.lng = block.lng;
+      }
       state.timeline.push(item);
       record('timeline.created', editor, { timelineId: item.id, blockId: block.id });
       return structuredClone(item);
@@ -162,12 +171,18 @@ export function createTripStore() {
       return structuredClone(item);
     },
 
-    editTimelineItem({ timelineId, time, note, editor }) {
+    editTimelineItem({ timelineId, time, note, lat, lng, editor }) {
       requireMember(editor);
       const item = findTimelineItem(timelineId);
       checkpoint();
       if (time !== undefined) item.time = time;
       if (note !== undefined) item.note = note;
+      if (lat !== undefined) {
+        if (lat === null) { delete item.lat; } else { item.lat = Number(lat); }
+      }
+      if (lng !== undefined) {
+        if (lng === null) { delete item.lng; } else { item.lng = Number(lng); }
+      }
       record('timeline.edited', editor, { timelineId: item.id });
       return structuredClone(item);
     },

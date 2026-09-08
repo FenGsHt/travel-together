@@ -100,11 +100,14 @@
             <h2 id="itinerary-title">把想去的地方拖进每一天</h2>
           </div>
           <div class="view-switch" aria-label="行程视图">
-            <button class="active">时间线</button><button>地图</button>
+            <button class="active" data-view="timeline">时间线</button><button data-view="map">地图</button>
           </div>
         </div>
         <p class="helper">从右侧拖动旅行块到日期栏。落下后可直接修改时间和备注；同行人的调整会显示在活动记录中。</p>
         <div class="timeline" id="timeline"></div>
+        <div class="map-container" id="map-container" style="display: none;">
+          <div class="map-canvas" id="map-canvas"></div>
+        </div>
       </section>
 
       <aside class="inspector" aria-label="灵感与协作状态">
@@ -197,6 +200,20 @@
     </div>
   </dialog>
 
+  <dialog id="location-picker-dialog" class="location-picker-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">选择位置</p>
+    <h2>在地图上点击选择坐标</h2>
+    <div class="location-picker-map" id="location-picker-map"></div>
+    <div class="location-picker-info" id="location-picker-info">
+      点击地图选择位置
+    </div>
+    <div class="location-picker-actions">
+      <button class="button button-ghost" id="location-picker-clear">清除</button>
+      <button class="button button-ink" id="location-picker-confirm" disabled>确认位置</button>
+    </div>
+  </dialog>
+
   <template id="timeline-day-template">
     <article class="day-column">
       <header><span class="day-number"></span><div><p class="eyebrow"></p><h3></h3></div><button class="add-slot" title="添加空白时间">＋</button></header>
@@ -204,6 +221,7 @@
     </article>
   </template>
 
+  <script src="https://webapi.amap.com/maps?v=2.0&key=8fbe29f9df06d4b82738fafcb5155bef"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
