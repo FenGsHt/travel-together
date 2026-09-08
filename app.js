@@ -946,10 +946,10 @@ document.querySelector('#add-block-form').addEventListener('submit', async (e) =
   e.preventDefault();
   const name = document.getElementById('block-name').value.trim();
   const imageUrl = document.getElementById('block-image').value.trim();
-  const image = pendingImageData || imageUrl;
+  const image = pendingImageData || imageUrl || 'diannan-images/spots/建水古城.jpg';
 
-  if (!name || !image) {
-    alert('请填写名称和图片');
+  if (!name) {
+    alert('请填写名称');
     return;
   }
 
