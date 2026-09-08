@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script type="module">
-    import * as api from './src/api-client.mjs';
+    import * as api from './src/api-client.js';
     
     // 检查登录状态
     const authStatus = await api.checkAuth();
@@ -133,13 +133,10 @@
         </section>
 
         <section id="decisions" class="decision-panel">
-          <div class="panel-heading"><div><p class="eyebrow">下一步</p><h2>待确认</h2></div><span class="count-badge">3</span></div>
-          <article class="decision-item">
-            <span class="decision-state">投票中</span>
-            <h3>元阳住山上还是新县城？</h3>
-            <p>小林倾向山上，方便第二天看日出。</p>
-            <div class="vote-row"><button>山上 <b>2</b></button><button>新县城 <b>1</b></button></div>
-          </article>
+          <div class="panel-heading"><div><p class="eyebrow">下一步</p><h2>待确认</h2></div><span class="count-badge" id="decisions-count">0</span></div>
+          <div id="decisions-list" class="decisions-list">
+            <p class="no-decisions">暂无待确认事项</p>
+          </div>
         </section>
 
         <section class="activity-panel">

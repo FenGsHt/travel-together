@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTripStore } from '../src/trip-store.mjs';
+import { createTripStore } from '../src/trip-store.js';
 
 test('undo and redo restore an edited timeline item', () => {
   const store = createTripStore();

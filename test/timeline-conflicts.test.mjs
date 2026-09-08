@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findTimeConflicts } from '../src/timeline-conflicts.mjs';
+import { findTimeConflicts } from '../src/timeline-conflicts.js';
 
 const timeline = [
   { id: 'breakfast', day: 1, time: '09:00', name: '米线' },

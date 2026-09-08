@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTripStore } from '../src/trip-store.mjs';
+import { createTripStore } from '../src/trip-store.js';
 
 describe('投票决策系统', () => {
   it('应该能为行程项创建投票', () => {

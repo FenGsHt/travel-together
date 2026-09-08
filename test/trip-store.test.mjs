@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTripStore } from '../src/trip-store.mjs';
+import { createTripStore } from '../src/trip-store.js';
 
 test('a travel block only needs a name and image', () => {
   const store = createTripStore();

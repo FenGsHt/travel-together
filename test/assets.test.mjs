@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { travelBlocks } from '../src/travel-blocks.mjs';
+import { travelBlocks } from '../src/travel-blocks.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 

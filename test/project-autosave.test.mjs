@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createProjectAutosave } from '../src/project-autosave.mjs';
+import { createProjectAutosave } from '../src/project-autosave.js';
 
 test('autosave debounces rapid edits and persists only the latest snapshot', async () => {
   const saved = [];

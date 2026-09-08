@@ -1,11 +1,11 @@
-import { createTripStore } from './src/trip-store.mjs';
-import { travelBlocks } from './src/travel-blocks.mjs';
-import * as api from './src/api-client.mjs';
-import { createProjectAutosave } from './src/project-autosave.mjs';
-import { findTimeConflicts } from './src/timeline-conflicts.mjs';
+import { createTripStore } from './src/trip-store.js';
+import { travelBlocks } from './src/travel-blocks.js';
+import * as api from './src/api-client.js';
+import { createProjectAutosave } from './src/project-autosave.js';
+import { findTimeConflicts } from './src/timeline-conflicts.js';
 import { realtimeClient } from './src/realtime-client.js';
-import { initMap, addMarkers, destroyMap } from './src/map-view.mjs';
-import { openLocationPicker } from './src/location-picker.mjs';
+import { initMap, addMarkers, destroyMap } from './src/map-view.js';
+import { openLocationPicker } from './src/location-picker.js';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
@@ -1189,12 +1189,6 @@ function formatTime(timestamp) {
   } else {
     return date.toLocaleDateString('zh-CN');
   }
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 renderLibrary();
