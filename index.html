@@ -121,17 +121,6 @@
           <div class="block-library" id="block-library"></div>
         </section>
 
-        <section class="ai-panel" aria-labelledby="ai-title">
-          <div class="panel-heading">
-            <div><p class="eyebrow">AI 行程管家</p><h2 id="ai-title">攻略整理助手</h2></div>
-            <span class="ai-badge">草案模式</span>
-          </div>
-          <p>粘贴攻略链接或一段文字，AI 只会生成待审核旅行块，不会直接改动正式行程。</p>
-          <textarea id="ai-source" rows="3" placeholder="例如：建水团山民居值得花半天，适合和古城一起安排……"></textarea>
-          <button class="ai-import" id="ai-import">生成待审核旅行块</button>
-          <div class="ai-drafts" id="ai-drafts"></div>
-        </section>
-
         <section id="decisions" class="decision-panel">
           <div class="panel-heading"><div><p class="eyebrow">下一步</p><h2>待确认</h2></div><span class="count-badge" id="decisions-count">0</span></div>
           <div id="decisions-list" class="decisions-list">
@@ -209,6 +198,30 @@
       <button class="button button-ghost" id="location-picker-clear">清除</button>
       <button class="button button-ink" id="location-picker-confirm" disabled>确认位置</button>
     </div>
+  </dialog>
+
+  <dialog id="add-block-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">添加旅行块</p>
+    <h2>创建自定义旅行块</h2>
+    <form id="add-block-form" class="add-block-form">
+      <div class="form-group">
+        <label for="block-name">名称</label>
+        <input id="block-name" type="text" placeholder="例如：建水古城" required>
+      </div>
+      <div class="form-group">
+        <label for="block-image">图片</label>
+        <div class="image-input-row">
+          <input id="block-image" type="url" placeholder="粘贴图片 URL 地址">
+          <label class="image-upload-btn">
+            上传
+            <input type="file" id="block-image-file" accept="image/*" hidden>
+          </label>
+        </div>
+        <div class="image-preview" id="image-preview"></div>
+      </div>
+      <button class="button button-ink" type="submit" style="width:100%">创建旅行块</button>
+    </form>
   </dialog>
 
   <template id="timeline-day-template">

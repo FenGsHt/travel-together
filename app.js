@@ -105,8 +105,6 @@ const store = createTripStore();
 const timeline = document.querySelector('#timeline');
 const library = document.querySelector('#block-library');
 const activityList = document.querySelector('#activity-list');
-const aiSourceInput = document.querySelector('#ai-source');
-const aiDrafts = document.querySelector('#ai-drafts');
 const editConflictDialog = document.querySelector('#edit-conflict-dialog');
 let draggedBlockId = null;
 
@@ -174,11 +172,6 @@ async function init() {
         });
         store.restorePollVotes({ pollId: createdPoll.id, votes: poll.votes || {} });
       }
-    });
-    
-    // 恢复 AI 草案
-    aiDrafts.forEach(draft => {
-      store.createAiDraft(draft);
     });
   } else {
     // 初始化默认数据（仅首次）
@@ -832,30 +825,9 @@ function renderActivity() {
   });
 }
 
-function renderAiDrafts() {
-  aiDrafts.replaceChildren();
-  const drafts = store.snapshot().aiDrafts.filter((draft) => draft.status === 'draft');
-  drafts.forEach((draft) => {
-    const element = document.createElement('article');
-    element.className = 'ai-draft';
-    element.innerHTML = `
-      <img src="${draft.image}" alt="${draft.name}">
-      <div><strong>${draft.name}</strong><small>来源：${draft.source}</small></div>
-      <button>审核导入</button>
-    `;
-    element.querySelector('button').addEventListener('click', () => {
-      store.approveAiDraft({ draftId: draft.id, editor });
-      renderLibrary(document.querySelector('#search-blocks').value);
-      render();
-    });
-    aiDrafts.append(element);
-  });
-}
-
 function render({ persist = autosaveEnabled } = {}) {
   renderTimeline();
   renderActivity();
-  renderAiDrafts();
   if (currentView === 'map') renderMapView();
   if (persist) saveProjectData();
 }
@@ -935,20 +907,56 @@ document.querySelector('#share-button').addEventListener('click', () => document
 document.querySelectorAll('.view-switch button[data-view]').forEach((btn) => {
   btn.addEventListener('click', () => switchView(btn.dataset.view));
 });
-document.querySelector('#add-block').addEventListener('click', () => alert('MVP 下一步：上传图片并创建自定义旅行块。'));
-document.querySelector('#ai-import').addEventListener('click', () => {
-  const source = aiSourceInput.value.trim();
-  if (!source) {
-    aiSourceInput.focus();
+// 添加旅行块对话框
+let pendingImageData = null;
+
+document.querySelector('#add-block').addEventListener('click', () => {
+  pendingImageData = null;
+  document.getElementById('add-block-form').reset();
+  document.getElementById('image-preview').innerHTML = '';
+  document.getElementById('add-block-dialog').showModal();
+});
+
+document.querySelector('#add-block-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('block-name').value.trim();
+  const imageUrl = document.getElementById('block-image').value.trim();
+  const image = pendingImageData || imageUrl;
+
+  if (!name || !image) {
+    alert('请填写名称和图片');
     return;
   }
-  store.createAiDraft({
-    name: source.includes('团山') ? '团山民居' : 'AI 提取的滇南灵感',
-    image: 'diannan-images/spots/建水古城.jpg',
-    source: source.slice(0, 32),
-  });
-  aiSourceInput.value = '';
+
+  store.createTravelBlock({ name, image, editor });
   render();
+  document.getElementById('add-block-dialog').close();
+  pendingImageData = null;
+});
+
+// 图片文件上传预览
+document.getElementById('block-image-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingImageData = ev.target.result;
+    document.getElementById('block-image').value = '';
+    document.getElementById('image-preview').innerHTML =
+      `<img src="${pendingImageData}" alt="预览" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px;">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('block-image').addEventListener('input', (e) => {
+  const url = e.target.value.trim();
+  if (url && !pendingImageData) {
+    document.getElementById('image-preview').innerHTML =
+      `<img src="${url}" alt="预览" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px;" onerror="this.parentElement.innerHTML='<span style=color:var(--terracotta)>图片加载失败</span>'">`;
+  } else if (!url) {
+    document.getElementById('image-preview').innerHTML = '';
+  }
 });
 document.querySelectorAll('[data-day-link]').forEach((button) => {
   button.addEventListener('click', () => document.querySelector(`#day-${button.dataset.dayLink}`).scrollIntoView({ behavior: 'smooth', block: 'center' }));
