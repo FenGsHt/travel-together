@@ -36,6 +36,12 @@ env/
 *.swo
 *~
 
+# macOS
+.DS_Store
+
+# 临时文件
+.feng-temp/
+
 # 数据文件（运行时生成）
 backend/data/
 
