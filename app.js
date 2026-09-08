@@ -805,8 +805,16 @@ function renderLibrary(query = '') {
       element.innerHTML = `
         <img src="${escapeHtml(block.image)}" alt="${escapeHtml(block.name)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2241%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
         <div><strong>${escapeHtml(block.name)}</strong><small>${escapeHtml(block.city)}</small></div>
-        <span class="drag-mark">⠿</span>
+        <button class="delete-block-btn" data-block-id="${escapeHtml(block.id)}" type="button" title="删除">×</button>
       `;
+      element.querySelector('.delete-block-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`确定删除「${block.name}」？已排入行程的项不会被删除。`)) {
+          store.deleteTravelBlock({ blockId: block.id, editor });
+          render();
+          renderLibrary(document.querySelector('#search-blocks').value);
+        }
+      });
       element.addEventListener('dragstart', (event) => {
         draggedBlockId = block.id;
         element.classList.add('dragging');

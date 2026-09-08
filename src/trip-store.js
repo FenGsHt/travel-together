@@ -105,6 +105,16 @@ export function createTripStore() {
       return structuredClone(block);
     },
 
+    deleteTravelBlock({ blockId, editor }) {
+      requireMember(editor);
+      const index = state.blocks.findIndex(b => b.id === blockId);
+      if (index === -1) throw new Error('Travel block not found');
+      checkpoint();
+      const [removed] = state.blocks.splice(index, 1);
+      record('block.deleted', editor, { blockId, name: removed.name });
+      return structuredClone(removed);
+    },
+
     createAiDraft({ name, image, source }) {
       if (!name?.trim() || !image?.trim() || !source?.trim()) {
         throw new Error('An AI draft needs a name, image, and source');
