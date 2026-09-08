@@ -458,6 +458,10 @@ function createTimelineCard(item) {
     ? `<div class="location-info" title="${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}">📍 ${item.lat.toFixed(3)}, ${item.lng.toFixed(3)}</div>`
     : '';
 
+  const categoryIcons = { scenic: '️', food: '🍜', hotel: '🏨', transport: '🚗', shopping: '🛍️', activity: '' };
+  const catIcon = categoryIcons[item.category] || '';
+  const priceBadge = item.price ? `<span class="card-price">${escapeHtml(item.price)}</span>` : '';
+
   const safeName = escapeHtml(item.name);
   const safeNote = escapeHtml(item.note || '');
   const safeImage = escapeHtml(item.image || '');
@@ -469,7 +473,8 @@ function createTimelineCard(item) {
     <img src="${safeImage}" alt="${safeName}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2256%22 height=%2248%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
     <div class="card-header">
       <input aria-label="${ariaLabel}" type="time" value="${safeTime}">
-      <div class="name">${safeName}</div>
+      <div class="name">${catIcon} ${safeName}</div>
+      ${priceBadge}
     </div>
     <div>
       <input class="note" aria-label="${noteAriaLabel}" value="${safeNote}" placeholder="添加同行备注">
@@ -802,9 +807,19 @@ function renderLibrary(query = '') {
       element.className = 'travel-block';
       element.draggable = true;
       element.dataset.blockId = block.id;
+      const categoryIcons = { scenic: '🏞️', food: '🍜', hotel: '🏨', transport: '🚗', shopping: '️', activity: '🎯' };
+      const categoryIcon = categoryIcons[block.category] || '';
+      const priceTag = block.price ? `<span class="block-price">${escapeHtml(block.price)}</span>` : '';
+      const descPreview = block.description ? `<small class="block-desc">${escapeHtml(block.description.slice(0, 30))}${block.description.length > 30 ? '…' : ''}</small>` : '';
+
       element.innerHTML = `
         <img src="${escapeHtml(block.image)}" alt="${escapeHtml(block.name)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2241%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
-        <div><strong>${escapeHtml(block.name)}</strong><small>${escapeHtml(block.city)}</small></div>
+        <div>
+          <strong>${categoryIcon} ${escapeHtml(block.name)}</strong>
+          ${priceTag}
+          ${descPreview}
+          <small>${escapeHtml(block.city || '')}</small>
+        </div>
         <button class="delete-block-btn" data-block-id="${escapeHtml(block.id)}" type="button" title="删除">×</button>
       `;
       element.querySelector('.delete-block-btn').addEventListener('click', (e) => {
@@ -946,6 +961,9 @@ document.querySelector('#add-block-form').addEventListener('submit', async (e) =
   e.preventDefault();
   const name = document.getElementById('block-name').value.trim();
   const imageUrl = document.getElementById('block-image').value.trim();
+  const category = document.getElementById('block-category').value;
+  const price = document.getElementById('block-price').value.trim();
+  const description = document.getElementById('block-description').value.trim();
   const image = pendingImageData || imageUrl || 'diannan-images/spots/建水古城.jpg';
 
   if (!name) {
@@ -953,8 +971,9 @@ document.querySelector('#add-block-form').addEventListener('submit', async (e) =
     return;
   }
 
-  store.createTravelBlock({ name, image, editor });
+  store.createTravelBlock({ name, image, category, price, description, editor });
   render();
+  renderLibrary(document.querySelector('#search-blocks').value);
   document.getElementById('add-block-dialog').close();
   pendingImageData = null;
 });

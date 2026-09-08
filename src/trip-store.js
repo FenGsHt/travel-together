@@ -87,20 +87,23 @@ export function createTripStore() {
   }
 
   return {
-    createTravelBlock({ name, image, lat, lng }) {
-      if (!name?.trim() || !image?.trim()) {
-        throw new Error('A travel block needs a name and image');
+    createTravelBlock({ name, image, lat, lng, description, price, category }) {
+      if (!name?.trim()) {
+        throw new Error('A travel block needs a name');
       }
       checkpoint();
       const block = {
         id: `block-${++blockSequence}`,
         name: name.trim(),
-        image: image.trim(),
+        image: (image || '').trim(),
       };
       if (lat != null && lng != null) {
         block.lat = Number(lat);
         block.lng = Number(lng);
       }
+      if (description?.trim()) block.description = description.trim();
+      if (price?.trim()) block.price = price.trim();
+      if (category) block.category = category;
       state.blocks.push(block);
       return structuredClone(block);
     },
@@ -113,6 +116,18 @@ export function createTripStore() {
       const [removed] = state.blocks.splice(index, 1);
       record('block.deleted', editor, { blockId, name: removed.name });
       return structuredClone(removed);
+    },
+
+    editTravelBlock({ blockId, description, price, category, editor }) {
+      requireMember(editor);
+      const block = state.blocks.find(b => b.id === blockId);
+      if (!block) throw new Error('Travel block not found');
+      checkpoint();
+      if (description !== undefined) block.description = description ? description.trim() : undefined;
+      if (price !== undefined) block.price = price ? price.trim() : undefined;
+      if (category !== undefined) block.category = category || undefined;
+      record('block.edited', editor, { blockId });
+      return structuredClone(block);
     },
 
     createAiDraft({ name, image, source }) {
@@ -161,11 +176,13 @@ export function createTripStore() {
         time,
         note: '',
       };
-      // 如果旅行块有坐标，继承到行程项
       if (block.lat != null && block.lng != null) {
         item.lat = block.lat;
         item.lng = block.lng;
       }
+      if (block.description) item.description = block.description;
+      if (block.price) item.price = block.price;
+      if (block.category) item.category = block.category;
       state.timeline.push(item);
       record('timeline.created', editor, { timelineId: item.id, blockId: block.id });
       return structuredClone(item);

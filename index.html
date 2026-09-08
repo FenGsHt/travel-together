@@ -215,7 +215,7 @@
         <input id="block-name" type="text" placeholder="例如：建水古城" required>
       </div>
       <div class="form-group">
-        <label for="block-image">图片</label>
+        <label for="block-image">图片（可选）</label>
         <div class="image-input-row">
           <input id="block-image" type="url" placeholder="粘贴图片 URL 地址">
           <label class="image-upload-btn">
@@ -224,6 +224,26 @@
           </label>
         </div>
         <div class="image-preview" id="image-preview"></div>
+      </div>
+      <div class="form-group">
+        <label for="block-category">类型</label>
+        <select id="block-category">
+          <option value="">未分类</option>
+          <option value="scenic">景点</option>
+          <option value="food">美食</option>
+          <option value="hotel">住宿</option>
+          <option value="transport">交通</option>
+          <option value="shopping">购物</option>
+          <option value="activity">活动</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="block-price">参考价格（可选）</label>
+        <input id="block-price" type="text" placeholder="例如：门票 80 元 / 人均 50">
+      </div>
+      <div class="form-group">
+        <label for="block-description">简介（可选）</label>
+        <textarea id="block-description" rows="3" placeholder="简单描述这个地点…"></textarea>
       </div>
       <button class="button button-ink" type="submit" style="width:100%">创建旅行块</button>
     </form>
