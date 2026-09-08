@@ -74,9 +74,11 @@ button { cursor: pointer; }
 .timeline-card.dragging { opacity: 0.5; transform: rotate(2deg); }
 .timeline-card.drag-over { border: 2px dashed var(--green); background: var(--green-soft); }
 .timeline-card img { width: 56px; height: 48px; object-fit: cover; border-radius: 4px; }.timeline-card input { width: 100%; border: 0; color: var(--ink); background: transparent; outline: none; }.timeline-card input[type=time] { color: var(--green); font: 11px 'DM Mono', monospace; }.timeline-card .name { font-size: 13px; font-weight: 700; }.timeline-card .note { border-bottom: 1px solid transparent; color: var(--muted); font-size: 12px; }.timeline-card .note:focus { border-color: var(--sun); }.time-conflict { margin: 5px 0 0; color: #9b3f26; font-size: 11px; line-height: 1.45; }.drag-handle { color: #a0aaa1; font-size: 17px; cursor: grab; }
-.poll-section { margin-top: 8px; grid-column: 1 / -1; }
-.poll-btn { width: 100%; padding: 6px 12px; background: var(--green-soft); color: var(--green); border: 1px solid var(--green); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.poll-section { margin-top: 6px; grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.poll-btn { padding: 4px 10px; background: var(--green-soft); color: var(--green); border: 1px solid var(--green); border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .poll-btn:hover { background: var(--green); color: white; }
+.pick-location-btn { margin-top: 0; padding: 4px 10px; font-size: 11px; border: 1px dashed var(--line); border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; width: auto; display: inline-block; }
+.pick-location-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-soft); }
 .poll-card { background: #f8faf9; border: 1px solid #d7ded2; border-radius: 6px; padding: 10px; }
 .poll-question { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
 .poll-options { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -96,18 +98,18 @@ button { cursor: pointer; }
 .poll-comment strong { color: var(--green); margin-right: 4px; }
 .poll-comments-more { font-size: 10px; color: var(--muted); text-align: center; margin-top: 6px; font-style: italic; }
 
-.comments-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.comments-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-.no-comments { font-size: 11px; color: var(--muted); text-align: center; padding: 8px; }
-.comment-item { background: var(--surface); padding: 8px; border-radius: 6px; border: 1px solid var(--line); }
-.comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.comment-author { font-size: 12px; font-weight: 600; color: var(--green); }
-.comment-time { font-size: 10px; color: var(--muted); }
-.comment-content { font-size: 12px; color: var(--ink); line-height: 1.5; margin-bottom: 6px; }
-.comment-actions { display: flex; gap: 6px; }
-.comment-actions button { font-size: 10px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--muted); cursor: pointer; }
+.comments-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.comments-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.no-comments { font-size: 10px; color: var(--muted); text-align: center; padding: 4px; }
+.comment-item { background: var(--surface); padding: 6px 8px; border-radius: 5px; border: 1px solid var(--line); }
+.comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+.comment-author { font-size: 11px; font-weight: 600; color: var(--green); }
+.comment-time { font-size: 9px; color: var(--muted); }
+.comment-content { font-size: 11px; color: var(--ink); line-height: 1.4; margin-bottom: 4px; }
+.comment-actions { display: flex; gap: 4px; }
+.comment-actions button { font-size: 9px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 3px; background: white; color: var(--muted); cursor: pointer; }
 .comment-actions button:hover { border-color: var(--green); color: var(--green); }
-.add-comment-btn { width: 100%; padding: 6px; font-size: 11px; border: 1px dashed var(--line); border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.add-comment-btn { padding: 3px 8px; font-size: 10px; border: 1px dashed var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; width: auto; display: inline-block; }
 .add-comment-btn:hover { border-color: var(--green); color: var(--green); }
 
 .mention { color: var(--green); font-weight: 600; }
@@ -150,9 +152,7 @@ dialog { width: min(400px, calc(100vw - 32px)); padding: 26px; border: 0; border
 .picker-pin { font-size: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
 
 /* 行程卡片上的位置信息 */
-.location-info { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 4px; padding: 3px 6px; background: var(--paper); border-radius: 4px; display: inline-block; }
-.pick-location-btn { width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 11px; border: 1px dashed var(--line); border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
-.pick-location-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+.location-info { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 4px; padding: 2px 6px; background: var(--paper); border-radius: 4px; display: inline-block; }
 
 /* 点击地图标记后高亮行程卡片 */
 .timeline-card.highlight { animation: card-highlight 2s ease-out; }
