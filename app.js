@@ -488,7 +488,8 @@ function createTimelineCard(item) {
         <button class="add-comment-btn" data-timeline-id="${escapeHtml(item.id)}">💬 添加评论</button>
       </div>
     </div>
-    <span class="drag-handle" aria-label="可拖动">⠿</span>
+    <span class="drag-handle" aria-label="可拖动"></span>
+    <span class="branch-connector" title="拖拽到另一个行程项创建分叉"></span>
   `;
 
   const [timeInput, noteInput] = card.querySelectorAll('input');
@@ -1030,6 +1031,91 @@ function renderMapView() {
     });
   });
 }
+
+// 分叉连线拖拽
+(function initBranchConnector() {
+  const svg = document.getElementById('branch-lines');
+  if (!svg) return;
+
+  let dragging = false;
+  let sourceCard = null;
+  let sourceId = null;
+  let line = null;
+
+  document.addEventListener('mousedown', (e) => {
+    const connector = e.target.closest('.branch-connector');
+    if (!connector) return;
+    const card = connector.closest('.timeline-card');
+    if (!card) return;
+    const item = store.snapshot().timeline.find(t => t.id === card.dataset.timelineId);
+    if (!item || item.branchGroup) return;
+
+    dragging = true;
+    sourceCard = card;
+    sourceId = item.id;
+
+    const rect = card.getBoundingClientRect();
+    const timelineRect = document.getElementById('timeline').getBoundingClientRect();
+    const startX = rect.right - timelineRect.left;
+    const startY = rect.top + rect.height / 2 - timelineRect.top;
+
+    svg.innerHTML = '';
+    svg.style.display = '';
+    svg.setAttribute('width', timelineRect.width);
+    svg.setAttribute('height', timelineRect.height);
+    svg.style.position = 'absolute';
+    svg.style.top = '0';
+    svg.style.left = '0';
+    svg.style.pointerEvents = 'none';
+
+    line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', startX);
+    line.setAttribute('y1', startY);
+    line.setAttribute('x2', startX);
+    line.setAttribute('y2', startY);
+    line.setAttribute('stroke', '#255f4d');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-dasharray', '6,4');
+    svg.appendChild(line);
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging || !line) return;
+    const timelineRect = document.getElementById('timeline').getBoundingClientRect();
+    const x = e.clientX - timelineRect.left;
+    const y = e.clientY - timelineRect.top;
+    line.setAttribute('x2', x);
+    line.setAttribute('y2', y);
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    svg.innerHTML = '';
+
+    const targetCard = document.elementFromPoint(e.clientX, e.clientY)?.closest('.timeline-card');
+    if (targetCard && targetCard !== sourceCard) {
+      const targetItem = store.snapshot().timeline.find(t => t.id === targetCard.dataset.timelineId);
+      if (targetItem && !targetItem.branchGroup && targetItem.day === store.snapshot().timeline.find(t => t.id === sourceId)?.day) {
+        const sourceItem = store.snapshot().timeline.find(t => t.id === sourceId);
+        if (sourceItem) {
+          store.createBranch({
+            day: sourceItem.day,
+            time: sourceItem.time,
+            blockIds: [sourceItem.blockId, targetItem.blockId],
+            editor,
+          });
+          store.removeTimelineItem({ timelineId: sourceId, editor });
+          render();
+        }
+      }
+    }
+    sourceCard = null;
+    sourceId = null;
+    line = null;
+  });
+})();
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
 document.querySelector('#invite-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
