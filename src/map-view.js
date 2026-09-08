@@ -3,6 +3,7 @@
 
 let map = null;
 let markers = [];
+let infoWindows = [];
 let AMap = null;
 
 /**
@@ -17,6 +18,11 @@ export function initMap(containerId, options = {}) {
   if (!AMap) {
     console.error('高德地图 SDK 未加载');
     return null;
+  }
+
+  // 销毁旧实例防止泄漏
+  if (map) {
+    destroyMap();
   }
 
   const center = options.center || [102.8, 23.4]; // 默认滇南中心
@@ -80,6 +86,7 @@ export function addMarkers(items, onClick) {
 
     marker.setMap(map);
     markers.push(marker);
+    infoWindows.push(infoWindow);
   });
 
   // 自动缩放到所有标记点
@@ -94,6 +101,8 @@ export function addMarkers(items, onClick) {
 export function clearMarkers() {
   markers.forEach(marker => marker.setMap(null));
   markers = [];
+  infoWindows.forEach(w => w.close());
+  infoWindows = [];
 }
 
 /**

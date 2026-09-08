@@ -7,6 +7,7 @@ let searchMarkers = [];
 let placeSearch = null;
 let selectedLocation = null;
 let resolvePicker = null;
+let searchSequence = 0;
 
 const DIALOG_ID = 'location-picker-dialog';
 const MAP_CONTAINER_ID = 'location-picker-map';
@@ -68,11 +69,12 @@ export function openLocationPicker(existingLat = null, existingLng = null) {
       }
     };
 
-    // 确认按钮
+    // 确认按钮 — 必须在 dialog.close() 之前 resolve，否则 close 事件会同步清空 selectedLocation
     confirmBtn.onclick = () => {
+      const result = selectedLocation;
       dialog.close();
       cleanupPicker();
-      resolve(selectedLocation);
+      resolve(result);
     };
 
     // 清除按钮
@@ -87,11 +89,10 @@ export function openLocationPicker(existingLat = null, existingLng = null) {
       confirmBtn.disabled = true;
     };
 
-    // 关闭弹窗时清理
+    // 关闭弹窗时清理（仅 Escape/点击外部触发，confirm 路径已在上面处理）
     dialog.addEventListener('close', function onClose() {
       dialog.removeEventListener('close', onClose);
       cleanupPicker();
-      resolve(null);
     }, { once: true });
   });
 }
@@ -157,8 +158,12 @@ function searchPlace(keyword) {
   clearSearchMarkers();
 
   const resultsContainer = document.getElementById(RESULTS_ID);
+  const seq = ++searchSequence;
 
   placeSearch.search(keyword, (status, result) => {
+    // 忽略过期请求的结果
+    if (seq !== searchSequence) return;
+
     if (status !== 'complete' || !result.poiList) {
       resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
       return;

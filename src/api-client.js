@@ -13,43 +13,38 @@ export async function checkAuth() {
   }
 }
 
-export async function getProjects() {
-  const resp = await fetch(`${API_BASE}/api/projects`, {
-    credentials: 'include'
-  });
+async function fetchJSON(url, options = {}) {
+  const resp = await fetch(url, { credentials: 'include', ...options });
   if (resp.status === 401) {
     window.location.href = 'login.html';
-    return [];
+    return null;
+  }
+  if (!resp.ok) {
+    const err = new Error(`HTTP ${resp.status}`);
+    err.status = resp.status;
+    throw err;
   }
   return await resp.json();
 }
 
+export async function getProjects() {
+  return await fetchJSON(`${API_BASE}/api/projects`) || [];
+}
+
 export async function getProject(projectId) {
-  const resp = await fetch(`${API_BASE}/api/projects/${projectId}`, {
-    credentials: 'include'
-  });
-  if (resp.status === 401) {
-    window.location.href = 'login.html';
-    return null;
-  }
-  if (resp.status === 404) {
-    return null;
-  }
+  const resp = await fetch(`${API_BASE}/api/projects/${projectId}`, { credentials: 'include' });
+  if (resp.status === 401) { window.location.href = 'login.html'; return null; }
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return await resp.json();
 }
 
 export async function createProject(data) {
-  const resp = await fetch(`${API_BASE}/api/projects`, {
+  return await fetchJSON(`${API_BASE}/api/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
     body: JSON.stringify(data)
   });
-  if (resp.status === 401) {
-    window.location.href = 'login.html';
-    return null;
-  }
-  return await resp.json();
 }
 
 export async function updateProject(projectId, data) {
@@ -59,14 +54,10 @@ export async function updateProject(projectId, data) {
     credentials: 'include',
     body: JSON.stringify(data)
   });
-  if (resp.status === 401) {
-    window.location.href = 'login.html';
-    return null;
-  }
+  if (resp.status === 401) { window.location.href = 'login.html'; return null; }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const payload = await resp.json();
-  if (resp.status === 409) {
-    return { conflict: true, project: payload.project };
-  }
+  if (resp.status === 409) return { conflict: true, project: payload.project };
   return payload;
 }
 
@@ -75,9 +66,6 @@ export async function deleteProject(projectId) {
     method: 'DELETE',
     credentials: 'include'
   });
-  if (resp.status === 401) {
-    window.location.href = 'login.html';
-    return false;
-  }
+  if (resp.status === 401) { window.location.href = 'login.html'; return false; }
   return resp.ok;
 }

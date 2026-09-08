@@ -218,15 +218,17 @@ function initRealtime() {
     updateOnlineUsersUI(users);
   });
   
-  // 监听远程编辑
+  // 监听远程编辑（防抖避免快速连发时数据竞争）
+  let remoteEditTimer = null;
   realtimeClient.on('remote_edit', (data) => {
     console.log('收到远程编辑:', data);
-    // 重新加载项目数据
-    loadProject().then(() => {
-      render();
-      // 显示操作通知
-      showRemoteAction(data);
-    });
+    clearTimeout(remoteEditTimer);
+    remoteEditTimer = setTimeout(() => {
+      loadProject().then(() => {
+        render();
+        showRemoteAction(data);
+      });
+    }, 300);
   });
   
   // 监听用户加入
@@ -359,8 +361,8 @@ function updateOnlineUsersUI(users) {
   
   container.innerHTML = users.map(user => `
     <div class="online-user">
-      <span class="user-avatar">${user.name.charAt(0)}</span>
-      <span class="user-name">${user.name}</span>
+      <span class="user-avatar">${escapeHtml(user.name.charAt(0))}</span>
+      <span class="user-name">${escapeHtml(user.name)}</span>
     </div>
   `).join('');
 }
@@ -456,21 +458,28 @@ function createTimelineCard(item) {
     ? `<div class="location-info" title="${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}">📍 ${item.lat.toFixed(3)}, ${item.lng.toFixed(3)}</div>`
     : '';
 
+  const safeName = escapeHtml(item.name);
+  const safeNote = escapeHtml(item.note || '');
+  const safeImage = escapeHtml(item.image || '');
+  const safeTime = escapeHtml(item.time || '');
+  const ariaLabel = `${safeName} 的时间`;
+  const noteAriaLabel = `${safeName} 的备注`;
+
   card.innerHTML = `
-    <img src="${item.image}" alt="${item.name}">
+    <img src="${safeImage}" alt="${safeName}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2256%22 height=%2248%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
     <div class="card-header">
-      <input aria-label="${item.name} 的时间" type="time" value="${item.time}">
-      <div class="name">${item.name}</div>
+      <input aria-label="${ariaLabel}" type="time" value="${safeTime}">
+      <div class="name">${safeName}</div>
     </div>
     <div>
-      <input class="note" aria-label="${item.name} 的备注" value="${item.note}" placeholder="添加同行备注">
+      <input class="note" aria-label="${noteAriaLabel}" value="${safeNote}" placeholder="添加同行备注">
       ${locationInfo}
       <button class="pick-location-btn" type="button">📍 选择位置</button>
       ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
-      <div class="comments-section" data-timeline-id="${item.id}">
+      <div class="comments-section" data-timeline-id="${escapeHtml(item.id)}">
         <div class="comments-list"></div>
-        <button class="add-comment-btn" data-timeline-id="${item.id}">💬 添加评论</button>
+        <button class="add-comment-btn" data-timeline-id="${escapeHtml(item.id)}">💬 添加评论</button>
       </div>
     </div>
     <span class="drag-handle" aria-label="可拖动">⠿</span>
@@ -511,8 +520,9 @@ function createTimelineCard(item) {
     }
     
     commentsList.innerHTML = comments.map(comment => {
-      // 高亮 @提及
-      const highlightedContent = comment.content.replace(
+      // 先转义再高亮 @提及，防止 XSS
+      const safeContent = escapeHtml(comment.content);
+      const highlightedContent = safeContent.replace(
         /@(\w+)/g,
         '<span class="mention">@$1</span>'
       );
@@ -768,8 +778,13 @@ function renderTimeline() {
       }
     });
     fragment.querySelector('.add-slot').addEventListener('click', () => {
-      dropZone.focus();
-      dropZone.classList.add('drag-over');
+      const name = prompt('行程名称：');
+      if (!name?.trim()) return;
+      const time = prompt('时间（如 10:00）：', '10:00');
+      if (!time) return;
+      const block = store.createTravelBlock({ name: name.trim(), image: 'diannan-images/spots/建水古城.jpg' });
+      store.scheduleBlock({ blockId: block.id, day: day.id, time: time.trim(), editor });
+      render();
     });
     timeline.append(fragment);
   }
@@ -788,8 +803,8 @@ function renderLibrary(query = '') {
       element.draggable = true;
       element.dataset.blockId = block.id;
       element.innerHTML = `
-        <img src="${block.image}" alt="${block.name}">
-        <div><strong>${block.name}</strong><small>${block.city}</small></div>
+        <img src="${escapeHtml(block.image)}" alt="${escapeHtml(block.name)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2241%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
+        <div><strong>${escapeHtml(block.name)}</strong><small>${escapeHtml(block.city)}</small></div>
         <span class="drag-mark">⠿</span>
       `;
       element.addEventListener('dragstart', (event) => {
@@ -822,7 +837,7 @@ function renderActivity() {
         : event.type === 'ai.draft.imported'
           ? '审核并导入了 AI 整理的旅行块'
           : '更新了行程备注';
-    item.innerHTML = `<strong>${event.editor.name}</strong> ${action}<br><span>刚刚</span>`;
+    item.innerHTML = `<strong>${escapeHtml(event.editor.name)}</strong> ${action}<br><span>刚刚</span>`;
     activityList.append(item);
   });
 }
@@ -954,8 +969,14 @@ document.getElementById('block-image-file').addEventListener('change', (e) => {
 document.getElementById('block-image').addEventListener('input', (e) => {
   const url = e.target.value.trim();
   if (url && !pendingImageData) {
-    document.getElementById('image-preview').innerHTML =
-      `<img src="${url}" alt="预览" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px;" onerror="this.parentElement.innerHTML='<span style=color:var(--terracotta)>图片加载失败</span>'">`;
+    const preview = document.getElementById('image-preview');
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '预览';
+    img.style.cssText = 'max-width:100%;max-height:120px;border-radius:6px;margin-top:6px;';
+    img.onerror = () => { preview.innerHTML = '<span style="color:var(--terracotta)">图片加载失败</span>'; };
+    preview.innerHTML = '';
+    preview.appendChild(img);
   } else if (!url) {
     document.getElementById('image-preview').innerHTML = '';
   }
