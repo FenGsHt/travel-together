@@ -1008,6 +1008,14 @@ if __name__ == '__main__':
     # 初始化 WebSocket
     init_socketio(app)
     
-    # 使用 socketio 启动，支持 WebSocket
+    # 使用 socketio 启动，支持 WebSocket。
+    # allow_unsafe_werkzeug=True 允许在 systemd / 容器等无 debug 的生产场景下
+    # 继续用 Werkzeug 开发服务器承载 SocketIO 长连接，避免 502。
     from websocket_handler import socketio
-    socketio.run(app, host='0.0.0.0', port=port, debug=debug)
+    socketio.run(
+        app,
+        host='0.0.0.0',
+        port=port,
+        debug=debug,
+        allow_unsafe_werkzeug=True,
+    )

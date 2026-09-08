@@ -1,5 +1,11 @@
 # Travel Together 任务清单
 
+> ## 当前暂停点（恢复开发时先处理）
+> - 自动任务推进已暂停；不会再在凌晨自动改代码或部署。
+> - 线上 `GET /api/health` 此前返回 **502 Bad Gateway**，根因为 systemd 直接 `python3 app.py` 启动而 Flask-SocketIO 缺少 `allow_unsafe_werkzeug=True`，被 Werkzeug >= 2.3 生产模式保护拒绝。
+> - ✅ 已修复：`socketio.run(...)` 已加 `allow_unsafe_werkzeug=True`，并新增 `tests/test_startup_regression.py` 启动回归测试。
+> - 恢复后下一步：推送后等待 GitHub Actions 成功 → 验证 `/api/health` 返回 JSON → 继续在 1Panel/Nginx 配置 `location /socket.io/` 反代到后端 5000，用双浏览器验收实时协作。
+
 ## 第一阶段：基础架构 ✅
 
 - [x] 修复 app.js 缺失变量定义
