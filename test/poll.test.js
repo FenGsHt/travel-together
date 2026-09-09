@@ -198,5 +198,35 @@ describe('投票决策系统', () => {
       () => store.createPoll({ question: '住哪里？', timelineItemId: 'timeline-1', creator, deadlineAt: 'not-a-date' }),
       /deadline is invalid/,
     );
+    assert.throws(
+      () => store.createPoll({ question: '   ', timelineItemId: 'timeline-1', creator }),
+      /needs a question/,
+    );
+  });
+
+  it('分叉投票使用稳定选项 ID，并保留展示名称', () => {
+    const store = createTripStore();
+    const poll = store.createPoll({
+      question: '路线选择',
+      timelineItemId: 'timeline-1',
+      branchGroup: 'branch-1',
+      creator: { id: 'feng', name: 'feng' },
+      options: ['timeline-1', 'timeline-2'],
+      optionLabels: {
+        'timeline-1': '建水古城',
+        'timeline-2': '元阳梯田',
+      },
+    });
+
+    store.vote({ pollId: poll.id, voter: { id: 'lin', name: 'lin' }, choice: 'timeline-2' });
+
+    const saved = store.snapshot().polls[0];
+    assert.equal(saved.branchGroup, 'branch-1');
+    assert.equal(saved.optionLabels['timeline-2'], '元阳梯田');
+    assert.deepEqual(store.getPollResults(poll.id), {
+      'timeline-1': 0,
+      'timeline-2': 1,
+      total: 1,
+    });
   });
 });

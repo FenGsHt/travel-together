@@ -3,9 +3,11 @@ export function createTripStore() {
   let timelineSequence = 0;
   let pollSequence = 0;
   let branchSequence = 0;
+  let connectionSequence = 0;
   const state = {
     blocks: [],
     timeline: [],
+    connections: [],
     aiDrafts: [],
     polls: [],
     comments: [],
@@ -23,13 +25,22 @@ export function createTripStore() {
   function capture() {
     return structuredClone({
       state,
-      sequences: { blockSequence, timelineSequence, pollSequence, branchSequence },
+      sequences: { blockSequence, timelineSequence, pollSequence, branchSequence, connectionSequence },
     });
   }
 
   function restore(snapshot) {
     Object.assign(state, structuredClone(snapshot.state));
-    ({ blockSequence, timelineSequence, pollSequence, branchSequence } = snapshot.sequences);
+    ({ blockSequence, timelineSequence, pollSequence, branchSequence, connectionSequence } = snapshot.sequences);
+  }
+
+  function maxNumericSuffix(items, prefix) {
+    return items.reduce((max, item) => {
+      const match = typeof item?.id === 'string'
+        ? item.id.match(new RegExp(`^${prefix}-(\\d+)$`))
+        : null;
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
   }
 
   function checkpoint() {
@@ -85,6 +96,21 @@ export function createTripStore() {
 
   function pollIsOpen(poll, now = new Date()) {
     return !poll.deadlineAt || new Date(poll.deadlineAt) > now;
+  }
+
+  function connectionCreatesCycle(fromTimelineId, toTimelineId) {
+    const pending = [toTimelineId];
+    const visited = new Set();
+    while (pending.length) {
+      const current = pending.pop();
+      if (current === fromTimelineId) return true;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      state.connections
+        .filter(connection => connection.fromTimelineId === current)
+        .forEach(connection => pending.push(connection.toTimelineId));
+    }
+    return false;
   }
 
   return {
@@ -199,7 +225,7 @@ export function createTripStore() {
       return structuredClone(item);
     },
 
-    editTimelineItem({ timelineId, time, note, lat, lng, editor }) {
+    editTimelineItem({ timelineId, time, note, lat, lng, canvasX, canvasY, editor }) {
       requireMember(editor);
       const item = findTimelineItem(timelineId);
       checkpoint();
@@ -211,6 +237,8 @@ export function createTripStore() {
       if (lng !== undefined) {
         if (lng === null) { delete item.lng; } else { item.lng = Number(lng); }
       }
+      if (canvasX !== undefined) item.canvasX = Number(canvasX);
+      if (canvasY !== undefined) item.canvasY = Number(canvasY);
       record('timeline.edited', editor, { timelineId: item.id });
       return structuredClone(item);
     },
@@ -240,14 +268,15 @@ export function createTripStore() {
 
     createBranch({ day, time, blockIds, editor }) {
       requireMember(editor);
-      if (!Array.isArray(blockIds) || blockIds.length < 2) {
+      const uniqueBlockIds = Array.isArray(blockIds) ? [...new Set(blockIds)] : [];
+      if (uniqueBlockIds.length < 2) {
         throw new Error('A branch needs at least two options');
       }
-      const branchGroup = `branch-${++branchSequence}`;
+      const blocks = uniqueBlockIds.map(findBlock);
       checkpoint();
+      const branchGroup = `branch-${++branchSequence}`;
       const items = [];
-      for (const blockId of blockIds) {
-        const block = findBlock(blockId);
+      for (const block of blocks) {
         const item = {
           id: `timeline-${++timelineSequence}`,
           blockId: block.id,
@@ -269,8 +298,132 @@ export function createTripStore() {
         state.timeline.push(item);
         items.push(structuredClone(item));
       }
-      record('branch.created', editor, { branchGroup, blockIds });
+      record('branch.created', editor, { branchGroup, blockIds: uniqueBlockIds });
       return items;
+    },
+
+    createBranchFromTimelineItem({ timelineId, blockId, editor }) {
+      requireMember(editor);
+      const source = findTimelineItem(timelineId);
+      const block = findBlock(blockId);
+      if (source.branchGroup) throw new Error('Timeline item is already in a branch');
+      if (state.connections.some(connection => (
+        connection.fromTimelineId === source.id || connection.toTimelineId === source.id
+      ))) {
+        throw new Error('Connected timeline item cannot become a branch option');
+      }
+      if (source.blockId === block.id) throw new Error('A branch needs distinct travel blocks');
+
+      checkpoint();
+      const branchGroup = `branch-${++branchSequence}`;
+      source.branchGroup = branchGroup;
+      source.branchStatus = 'pending';
+
+      const alternative = {
+        id: `timeline-${++timelineSequence}`,
+        blockId: block.id,
+        name: block.name,
+        image: block.image,
+        day: source.day,
+        time: source.time,
+        note: '',
+        branchGroup,
+        branchStatus: 'pending',
+      };
+      if (block.lat != null && block.lng != null) {
+        alternative.lat = block.lat;
+        alternative.lng = block.lng;
+      }
+      if (block.description) alternative.description = block.description;
+      if (block.price) alternative.price = block.price;
+      if (block.category) alternative.category = block.category;
+      state.timeline.push(alternative);
+
+      record('branch.created', editor, {
+        branchGroup,
+        timelineIds: [source.id, alternative.id],
+        blockIds: [source.blockId, block.id],
+      });
+      return [structuredClone(source), structuredClone(alternative)];
+    },
+
+    connectTimelineItems({ fromTimelineId, toTimelineId, editor }) {
+      requireMember(editor);
+      if (fromTimelineId === toTimelineId) {
+        throw new Error('A timeline item cannot connect to itself');
+      }
+
+      const source = findTimelineItem(fromTimelineId);
+      const target = findTimelineItem(toTimelineId);
+      if (source.branchGroup || target.branchGroup) {
+        throw new Error('Branch options cannot be connected as timeline steps');
+      }
+      if (state.connections.some(connection => (
+        connection.fromTimelineId === fromTimelineId
+        && connection.toTimelineId === toTimelineId
+      ))) {
+        throw new Error('Timeline connection already exists');
+      }
+      if (connectionCreatesCycle(fromTimelineId, toTimelineId)) {
+        throw new Error('Timeline connection would create a cycle');
+      }
+
+      checkpoint();
+      const connection = {
+        id: `connection-${++connectionSequence}`,
+        fromTimelineId,
+        toTimelineId,
+        votes: {},
+      };
+      state.connections.push(connection);
+      record('timeline.connected', editor, {
+        connectionId: connection.id,
+        fromTimelineId,
+        toTimelineId,
+      });
+      return structuredClone(connection);
+    },
+
+    voteConnection({ connectionId, voter }) {
+      requireMember(voter);
+      const connection = state.connections.find(candidate => candidate.id === connectionId);
+      if (!connection) throw new Error('Timeline connection not found');
+      const alreadyVotedHere = Object.hasOwn(connection.votes || {}, voter.id);
+
+      checkpoint();
+      state.connections
+        .filter(candidate => candidate.fromTimelineId === connection.fromTimelineId)
+        .forEach(candidate => {
+          if (!candidate.votes || typeof candidate.votes !== 'object' || Array.isArray(candidate.votes)) {
+            candidate.votes = {};
+          }
+          delete candidate.votes[voter.id];
+        });
+
+      if (!alreadyVotedHere) {
+        connection.votes[voter.id] = { id: voter.id, name: voter.name };
+      }
+      record('timeline.connection_voted', voter, {
+        connectionId,
+        fromTimelineId: connection.fromTimelineId,
+        toTimelineId: connection.toTimelineId,
+        selected: !alreadyVotedHere,
+      });
+      return structuredClone(connection);
+    },
+
+    disconnectTimelineItems({ connectionId, editor }) {
+      requireMember(editor);
+      const index = state.connections.findIndex(connection => connection.id === connectionId);
+      if (index === -1) throw new Error('Timeline connection not found');
+      checkpoint();
+      const [connection] = state.connections.splice(index, 1);
+      record('timeline.disconnected', editor, {
+        connectionId,
+        fromTimelineId: connection.fromTimelineId,
+        toTimelineId: connection.toTimelineId,
+      });
+      return structuredClone(connection);
     },
 
     resolveBranch({ branchGroup, selectedTimelineId, editor }) {
@@ -292,6 +445,9 @@ export function createTripStore() {
       checkpoint();
       const branchGroup = item.branchGroup;
       state.timeline = state.timeline.filter(t => t.id !== timelineId);
+      state.connections = state.connections.filter(connection => (
+        connection.fromTimelineId !== timelineId && connection.toTimelineId !== timelineId
+      ));
       // 如果分支只剩一个选项，取消分支
       const remaining = state.timeline.filter(t => t.branchGroup === branchGroup);
       if (remaining.length <= 1) {
@@ -307,26 +463,36 @@ export function createTripStore() {
       if (index === -1) throw new Error('Timeline item not found');
       checkpoint();
       state.timeline.splice(index, 1);
+      state.connections = state.connections.filter(connection => (
+        connection.fromTimelineId !== timelineId && connection.toTimelineId !== timelineId
+      ));
       record('timeline.deleted', editor, { timelineId });
       return true;
     },
 
-    createPoll({ question, timelineItemId, creator, options, deadlineAt }) {
+    createPoll({ question, timelineItemId, creator, options, optionLabels, deadlineAt, branchGroup }) {
       requireMember(creator);
+      if (!question?.trim()) throw new Error('A poll needs a question');
       const normalizedOptions = normalizePollOptions(options);
       const normalizedDeadline = normalizeDeadline(deadlineAt);
       checkpoint();
       const poll = {
         id: `poll-${++pollSequence}`,
-        question,
+        question: question.trim(),
         timelineItemId,
         creator: { id: creator.id, name: creator.name },
         options: normalizedOptions,
         deadlineAt: normalizedDeadline,
         votes: {},
       };
+      if (branchGroup) poll.branchGroup = branchGroup;
+      if (optionLabels && typeof optionLabels === 'object' && !Array.isArray(optionLabels)) {
+        poll.optionLabels = Object.fromEntries(
+          normalizedOptions.map((option) => [option, String(optionLabels[option] || option)]),
+        );
+      }
       state.polls.push(poll);
-      record('poll.created', creator, { pollId: poll.id, question });
+      record('poll.created', creator, { pollId: poll.id, question: poll.question, branchGroup });
       return structuredClone(poll);
     },
 
@@ -387,13 +553,40 @@ export function createTripStore() {
       redoStack.length = 0;
     },
 
+    hydrate(snapshot = {}) {
+      const nextState = {
+        blocks: Array.isArray(snapshot.blocks) ? snapshot.blocks : [],
+        timeline: Array.isArray(snapshot.timeline) ? snapshot.timeline : [],
+        connections: Array.isArray(snapshot.connections) ? snapshot.connections : [],
+        aiDrafts: Array.isArray(snapshot.aiDrafts) ? snapshot.aiDrafts : [],
+        polls: Array.isArray(snapshot.polls) ? snapshot.polls : [],
+        comments: Array.isArray(snapshot.comments) ? snapshot.comments : [],
+        activity: Array.isArray(snapshot.activity) ? snapshot.activity : [],
+      };
+
+      Object.assign(state, structuredClone(nextState));
+      blockSequence = maxNumericSuffix(state.blocks, 'block');
+      timelineSequence = maxNumericSuffix(state.timeline, 'timeline');
+      pollSequence = maxNumericSuffix(state.polls, 'poll');
+      branchSequence = maxNumericSuffix(
+        state.timeline.map((item) => ({ id: item.branchGroup })),
+        'branch',
+      );
+      connectionSequence = maxNumericSuffix(state.connections, 'connection');
+      undoStack.length = 0;
+      redoStack.length = 0;
+      return this.snapshot();
+    },
+
     getPollResults(pollId) {
       const poll = findPoll(pollId);
       const results = Object.fromEntries(poll.options.map((option) => [option, 0]));
       results.total = 0;
       Object.values(poll.votes).forEach((choice) => {
-        if (Object.hasOwn(results, choice)) results[choice]++;
-        results.total++;
+        if (Object.hasOwn(results, choice)) {
+          results[choice]++;
+          results.total++;
+        }
       });
       return results;
     },

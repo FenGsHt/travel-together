@@ -70,6 +70,30 @@ def resolve_user_profile(user_id):
     return get_user_by_id(user_id)
 
 
+def _site_access_authenticated():
+    """校验共享访问密钥会话。"""
+    return bool(
+        _access_configured()
+        and session.get('site_access') is True
+        and hmac.compare_digest(
+            session.get('site_access_token_hash', ''),
+            _access_token_fingerprint(),
+        )
+    )
+
+
+def authenticated_user():
+    """返回当前会话用户，兼容共享访问密钥和注册用户登录。"""
+    if _site_access_authenticated():
+        return resolve_user_profile(session.get('user_id') or SITE_ACCESS_USER_ID)
+
+    user_id = session.get('user_id')
+    # 共享访问身份必须同时拥有有效的 site_access 会话，不能仅凭 user_id 通过认证。
+    if not user_id or user_id == SITE_ACCESS_USER_ID:
+        return None
+    return resolve_user_profile(user_id)
+
+
 def display_name_for(user):
     """兼容旧数据的用户展示名字段。"""
     return user.get('display_name') or user.get('displayName') or user.get('username', '未知用户')
@@ -78,17 +102,15 @@ def display_name_for(user):
 @app.route('/api/auth/status', methods=['GET'])
 def auth_status():
     """检查认证状态"""
-    if not _access_configured():
+    user = authenticated_user()
+    if not _access_configured() and not user:
         return jsonify({'authenticated': False, 'configured': False}), 503
 
-    authenticated = (
-        session.get('site_access') is True
-        and hmac.compare_digest(
-            session.get('site_access_token_hash', ''),
-            _access_token_fingerprint()
-        )
-    )
-    return jsonify({'authenticated': authenticated, 'configured': True})
+    return jsonify({
+        'authenticated': bool(user),
+        'configured': _access_configured(),
+        'user': user,
+    })
 
 
 @app.route('/api/auth/verify', methods=['POST'])
@@ -145,6 +167,8 @@ def register_user():
     if error or not user:
         return jsonify({'error': error or '创建失败'}), 400
     
+    # 切换认证方式时清除旧的共享访问密钥会话。
+    session.clear()
     # 自动登录
     session['user_id'] = user['id']
     session['username'] = user['username']
@@ -167,6 +191,7 @@ def login_user():
     if error:
         return jsonify({'error': error}), 401
     
+    session.clear()
     session['user_id'] = user['id']
     session['username'] = user['username']
     
@@ -176,12 +201,7 @@ def login_user():
 @app.route('/api/users/me', methods=['GET'])
 def get_current_user():
     """获取当前登录用户信息"""
-    user_id = session.get('user_id')
-    
-    if not user_id:
-        return jsonify({'authenticated': False}), 401
-    
-    user = resolve_user_profile(user_id)
+    user = authenticated_user()
     
     if not user:
         session.clear()
@@ -193,6 +213,8 @@ def get_current_user():
 @app.route('/api/users', methods=['GET'])
 def list_users():
     """获取所有用户列表"""
+    if not authenticated_user():
+        return jsonify({'error': '未授权'}), 401
     users = get_all_users()
     return jsonify({'users': users})
 
@@ -203,16 +225,10 @@ def require_user_auth(f):
     
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = session.get('user_id')
-        
-        if not user_id:
-            return jsonify({'error': '未登录'}), 401
-        
-        user = resolve_user_profile(user_id)
+        user = authenticated_user()
         if not user:
-            session.clear()
-            return jsonify({'error': '用户不存在'}), 401
-        
+            return jsonify({'error': '未登录'}), 401
+
         request.current_user = user
         return f(*args, **kwargs)
     
@@ -277,20 +293,15 @@ def require_auth(f):
     
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not _access_configured():
+        if not _access_configured() and not session.get('user_id'):
             return jsonify({'error': '认证未配置'}), 503
-        
-        authenticated = (
-            session.get('site_access') is True
-            and hmac.compare_digest(
-                session.get('site_access_token_hash', ''),
-                _access_token_fingerprint()
-            )
-        )
-        
-        if not authenticated:
+
+        user = authenticated_user()
+        if not user:
+            session.clear()
             return jsonify({'error': '未授权'}), 401
-        
+
+        request.current_user = user
         return f(*args, **kwargs)
     
     return decorated
@@ -358,6 +369,7 @@ def create_project():
         'data': {
             'blocks': [],
             'timeline': [],
+            'connections': [],
             'polls': [],
             'aiDrafts': [],
             'activity': []

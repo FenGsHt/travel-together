@@ -1,5 +1,7 @@
 // API 客户端
-const API_BASE = window.location.origin;
+export const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:5001'
+  : window.location.origin;
 
 export async function checkAuth() {
   try {
@@ -11,6 +13,17 @@ export async function checkAuth() {
     console.error('Auth check failed:', error);
     return { authenticated: false };
   }
+}
+
+export async function getCurrentUser() {
+  const resp = await fetch(`${API_BASE}/api/users/me`, { credentials: 'include' });
+  if (resp.status === 401) {
+    window.location.href = 'login.html';
+    return null;
+  }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const payload = await resp.json();
+  return payload.user || null;
 }
 
 async function fetchJSON(url, options = {}) {
@@ -55,9 +68,13 @@ export async function updateProject(projectId, data) {
     body: JSON.stringify(data)
   });
   if (resp.status === 401) { window.location.href = 'login.html'; return null; }
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const payload = await resp.json();
   if (resp.status === 409) return { conflict: true, project: payload.project };
+  if (!resp.ok) {
+    const err = new Error(payload.error || `HTTP ${resp.status}`);
+    err.status = resp.status;
+    throw err;
+  }
   return payload;
 }
 

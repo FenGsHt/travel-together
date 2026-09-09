@@ -36,6 +36,7 @@ export class ProjectStore {
       data: {
         blocks: [],
         timeline: [],
+        connections: [],
         polls: [],
         activity: []
       }

@@ -28,7 +28,10 @@ class RealtimeClient {
       return;
     }
 
-    this.socket = window.io(window.location.origin, {
+    const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:5001'
+      : window.location.origin;
+    this.socket = window.io(backendUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,

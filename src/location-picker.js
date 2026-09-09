@@ -126,10 +126,10 @@ function initPickerMap(existingLat, existingLng) {
     resizeEnable: true,
   });
 
-  // 初始化地点搜索（全国范围）
+  // 初始化地点搜索（不限制城市，搜索全国）
   placeSearch = new AMap.PlaceSearch({
     pageSize: 8,
-    city: '全国',
+    cityLimit: false,
     map: pickerMap,
   });
 

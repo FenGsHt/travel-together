@@ -96,16 +96,26 @@
       <section class="itinerary" id="itinerary" aria-labelledby="itinerary-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">共同编辑的时间树</p>
-            <h2 id="itinerary-title">把想去的地方拖进每一天</h2>
+            <p class="eyebrow">共同编辑的旅行画布</p>
+            <h2 id="itinerary-title">把整段旅程铺在同一张画布上</h2>
           </div>
           <div class="view-switch" aria-label="行程视图">
             <button class="active" data-view="timeline">时间线</button><button data-view="map">地图</button>
           </div>
         </div>
-        <p class="helper">从右侧拖动旅行块到日期栏。落下后可直接修改时间和备注；同行人的调整会显示在活动记录中。</p>
-        <div class="timeline" id="timeline">
-          <svg class="branch-lines" id="branch-lines"></svg>
+        <p class="helper">拖动白板空白处可移动画布；拖动旅行块可自由摆放，单击可查看详情；拖动卡片底部圆点连接下一站。画布支持缩放，点击箭头可为路线投票。</p>
+        <div class="board-shell">
+          <div class="canvas-controls" aria-label="画布缩放控制">
+            <button id="canvas-zoom-out" type="button" aria-label="缩小画布">−</button>
+            <button id="canvas-zoom-value" type="button" aria-label="重置画布缩放">75%</button>
+            <button id="canvas-zoom-in" type="button" aria-label="放大画布">＋</button>
+            <button id="canvas-zoom-fit" type="button" aria-label="适应画布">适应</button>
+          </div>
+          <div class="board-viewport" id="board-viewport" tabindex="0" aria-label="可拖拽平移和缩放的旅行白板">
+            <div class="timeline" id="timeline">
+              <svg class="route-lines" id="route-lines" aria-label="下一站连线，可点击投票"></svg>
+            </div>
+          </div>
         </div>
         <div class="map-container" id="map-container" style="display: none;">
           <div class="map-canvas" id="map-canvas"></div>
@@ -119,7 +129,7 @@
             <button class="icon-button" id="add-block" aria-label="添加旅行块">＋</button>
           </div>
           <label class="search"><span>⌕</span><input id="search-blocks" placeholder="搜索景点 / 美食" /></label>
-          <p class="drag-tip">拖动名称和图片组成的旅行块，排进你的时间树。</p>
+          <p class="drag-tip">把旅行块拖进画布中的任意一天，自由拼出路线。</p>
           <div class="block-library" id="block-library"></div>
         </section>
 
@@ -251,17 +261,72 @@
     </form>
   </dialog>
 
+  <dialog id="travel-detail-dialog" class="travel-detail-dialog" aria-labelledby="travel-detail-title">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭详情">×</button>
+    <div class="travel-detail-layout">
+      <figure class="travel-detail-visual">
+        <img id="travel-detail-image" alt="">
+        <figcaption id="travel-detail-category"></figcaption>
+      </figure>
+      <section class="travel-detail-content">
+        <p class="eyebrow">旅行块详情</p>
+        <h2 id="travel-detail-title"></h2>
+        <div class="travel-detail-badges" id="travel-detail-badges"></div>
+        <p class="travel-detail-description" id="travel-detail-description"></p>
+        <dl class="travel-detail-facts" id="travel-detail-facts"></dl>
+      </section>
+    </div>
+  </dialog>
+
   <dialog id="branch-dialog" class="branch-dialog">
     <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
-    <p class="eyebrow">创建分支路线</p>
-    <h2>选择另一个旅行块作为分支选项</h2>
+    <p class="eyebrow">创建备选分叉</p>
+    <h2>选择一个需要投票取舍的备选旅行块</h2>
     <div class="branch-block-list" id="branch-block-list"></div>
+  </dialog>
+
+  <dialog id="poll-dialog" class="poll-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">发起投票</p>
+    <h2>创建投票</h2>
+    <form id="poll-form" class="add-block-form">
+      <div class="form-group">
+        <label for="poll-question">问题</label>
+        <input id="poll-question" type="text" placeholder="例如：元阳住山上还是县城？" required>
+      </div>
+      <div class="form-group">
+        <label for="poll-options">选项（每行一个）</label>
+        <textarea id="poll-options" rows="4" placeholder="山上&#10;新县城" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="poll-deadline">截止时间（可选）</label>
+        <input id="poll-deadline" type="datetime-local">
+      </div>
+      <button class="button button-ink" type="submit" style="width:100%">创建投票</button>
+    </form>
+  </dialog>
+
+  <dialog id="add-slot-dialog" class="add-slot-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">添加行程项</p>
+    <h2>新建空白时间</h2>
+    <form id="add-slot-form" class="add-block-form">
+      <div class="form-group">
+        <label for="slot-name">名称</label>
+        <input id="slot-name" type="text" placeholder="行程名称" required>
+      </div>
+      <div class="form-group">
+        <label for="slot-time">时间</label>
+        <input id="slot-time" type="time" value="10:00" required>
+      </div>
+      <button class="button button-ink" type="submit" style="width:100%">添加</button>
+    </form>
   </dialog>
 
   <template id="timeline-day-template">
     <article class="day-column">
       <header><span class="day-number"></span><div><p class="eyebrow"></p><h3></h3></div><button class="add-slot" title="添加空白时间">＋</button></header>
-      <div class="drop-zone" tabindex="0"><span class="drop-hint">拖到这里</span><div class="timeline-items"></div></div>
+      <div class="drop-zone" tabindex="0"><span class="drop-hint">拖入这一天</span><div class="timeline-items"></div></div>
     </article>
   </template>
 

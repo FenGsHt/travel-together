@@ -7,3 +7,5 @@ def test_all_dialog_close_buttons_use_explicit_close_target_binding():
 
     assert 'data-close-dialog' in html
     assert "querySelectorAll('[data-close-dialog]')" in script
+    assert "travelDetailDialog?.addEventListener('click'" in script
+    assert 'if (clickedBackdrop) travelDetailDialog.close()' in script

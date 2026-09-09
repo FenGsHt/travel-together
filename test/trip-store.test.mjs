@@ -69,6 +69,28 @@ test('moving a timeline item changes its day and time instead of duplicating it'
   assert.equal(store.snapshot().activity.at(0).type, 'timeline.moved');
 });
 
+test('free canvas coordinates are stored on a timeline item', () => {
+  const store = createTripStore();
+  const block = store.createTravelBlock({ name: '建水古城', image: 'image.jpg' });
+  const item = store.scheduleBlock({
+    blockId: block.id,
+    day: 1,
+    time: '09:00',
+    editor: { id: 'feng', name: 'feng' },
+  });
+
+  const moved = store.editTimelineItem({
+    timelineId: item.id,
+    canvasX: 136,
+    canvasY: -42,
+    editor: { id: 'feng', name: 'feng' },
+  });
+
+  assert.equal(moved.canvasX, 136);
+  assert.equal(moved.canvasY, -42);
+  assert.equal(store.snapshot().timeline[0].canvasX, 136);
+});
+
 test('a scheduled travel block keeps editable time and note details', () => {
   const store = createTripStore();
   const block = store.createTravelBlock({

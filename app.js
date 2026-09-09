@@ -12,8 +12,13 @@ const currentProjectId = localStorage.getItem('currentProjectId');
 let currentProject = null;
 let autosaveEnabled = false;
 let pendingConflictSnapshot = null;
+let editor = { id: 'site-access-user', name: '协作访客' };
 let currentView = 'timeline'; // 'timeline' | 'map'
 let mapViewInitialized = false;
+const CANVAS_ZOOM_MIN = 0.5;
+const CANVAS_ZOOM_MAX = 1.6;
+const CANVAS_ZOOM_STEP = 0.1;
+let canvasZoom = Number(localStorage.getItem(`travel-canvas-zoom-${currentProjectId || 'default'}`)) || 0.75;
 
 const projectAutosave = createProjectAutosave({
   delay: 500,
@@ -33,6 +38,7 @@ const projectAutosave = createProjectAutosave({
       throw new Error('保存项目失败');
     }
     currentProject = updatedProject;
+    broadcastEdit('project_updated', { revision: updatedProject.revision });
   },
   onError: (error) => console.error('Project autosave failed:', error),
 });
@@ -51,6 +57,10 @@ async function loadProject() {
   }
   
   return true;
+}
+
+function hydrateProjectData() {
+  store.hydrate(currentProject?.data || {});
 }
 
 // 更新页面标题和项目名称显示
@@ -100,7 +110,6 @@ function generateDays(startDate, endDate) {
   return result;
 }
 
-const editor = { id: 'feng', name: 'feng' };
 const store = createTripStore();
 const timeline = document.querySelector('#timeline');
 const library = document.querySelector('#block-library');
@@ -110,96 +119,68 @@ let draggedBlockId = null;
 
 // 异步初始化
 async function init() {
-  const loaded = await loadProject();
-  if (!loaded) return;
+  try {
+    const loaded = await loadProject();
+    if (!loaded) return;
+
+    const user = await api.getCurrentUser();
+    if (user) {
+      editor = {
+        id: user.id,
+        name: user.display_name || user.displayName || user.username || '协作访客',
+      };
+    }
   
-  // 生成天数
-  if (currentProject.startDate && currentProject.endDate) {
-    days = generateDays(currentProject.startDate, currentProject.endDate);
-  } else {
-    // 默认 5 天
-    days = [
-      { id: 1, label: '第 1 天', title: '第 1 天' },
-      { id: 2, label: '第 2 天', title: '第 2 天' },
-      { id: 3, label: '第 3 天', title: '第 3 天' },
-      { id: 4, label: '第 4 天', title: '第 4 天' },
-      { id: 5, label: '第 5 天', title: '第 5 天' },
-    ];
-  }
-  
-  updateProjectUI();
-  
-  // 从项目数据恢复
-  if (currentProject.data && currentProject.data.blocks) {
-    const { blocks, timeline, polls, aiDrafts, activity } = currentProject.data;
-    
-    // 恢复旅行块
-    blocks.forEach(block => {
-      store.createTravelBlock(block);
-    });
-    
-    // 恢复时间线，并保留旧 ID 到新 ID 的映射以恢复关联投票。
-    const timelineIdMap = new Map();
-    timeline.forEach(item => {
-      const block = store.snapshot().blocks.find(b => b.name === item.name);
-      if (block) {
-        const createdTimelineItem = store.scheduleBlock({
-          blockId: block.id,
-          day: item.day,
-          time: item.time,
-          editor: item.editor || editor
-        });
-        timelineIdMap.set(item.id, createdTimelineItem.id);
-        if (item.note) {
-          store.editTimelineItem({ timelineId: createdTimelineItem.id, note: item.note, editor: item.editor || editor });
-        }
-      }
-    });
-    
-    // 恢复投票
-    polls.forEach(poll => {
-      const restoredTimelineId = timelineIdMap.get(poll.timelineItemId);
-      const timelineItem = store.snapshot().timeline.find((item) => (
-        item.id === restoredTimelineId || (!restoredTimelineId && item.name === poll.timelineItemName)
-      ));
-      if (timelineItem) {
-        const createdPoll = store.createPoll({
-          question: poll.question,
-          timelineItemId: timelineItem.id,
-          creator: poll.creator || editor,
-          options: poll.options,
-          deadlineAt: poll.deadlineAt,
-        });
-        store.restorePollVotes({ pollId: createdPoll.id, votes: poll.votes || {} });
-      }
-    });
-  } else {
-    // 初始化默认数据（仅首次）
-    const storeIds = new Map();
-    for (const block of travelBlocks) {
-      const created = store.createTravelBlock(block);
-      storeIds.set(block.id, created.id);
+    // 生成天数
+    if (currentProject.startDate && currentProject.endDate) {
+      days = generateDays(currentProject.startDate, currentProject.endDate);
+    } else {
+      // 默认 5 天
+      days = [
+        { id: 1, label: '第 1 天', title: '第 1 天' },
+        { id: 2, label: '第 2 天', title: '第 2 天' },
+        { id: 3, label: '第 3 天', title: '第 3 天' },
+        { id: 4, label: '第 4 天', title: '第 4 天' },
+        { id: 5, label: '第 5 天', title: '第 5 天' },
+      ];
     }
 
-    function initialBlock(sourceId, day, time) {
-      store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
-    }
-    initialBlock('jianshui', 1, '10:30');
-    initialBlock('barbecue', 1, '19:00');
-    initialBlock('duoyi-tree', 3, '06:10');
-  }
-  
-  // 项目加载时调用的恢复方法不应进入用户可撤销的编辑历史。
-  store.clearHistory();
-  renderLibrary();
-  render({ persist: false });
-  autosaveEnabled = true;
-  
-  // 初始化通知系统
-  initNotifications();
+    updateProjectUI();
 
-  // 数据恢复和 UI 就绪后再连接实时协作，避免远程事件覆盖未初始化状态。
-  initRealtime();
+    // 从项目数据恢复完整快照，保留实体 ID 和扩展字段。
+    if (currentProject.data) {
+      hydrateProjectData();
+    } else {
+      // 初始化默认数据（仅首次）
+      const storeIds = new Map();
+      for (const block of travelBlocks) {
+        const created = store.createTravelBlock(block);
+        storeIds.set(block.id, created.id);
+      }
+
+      function initialBlock(sourceId, day, time) {
+        store.scheduleBlock({ blockId: storeIds.get(sourceId), day, time, editor });
+      }
+      initialBlock('jianshui', 1, '10:30');
+      initialBlock('barbecue', 1, '19:00');
+      initialBlock('duoyi-tree', 3, '06:10');
+    }
+
+    // 项目加载时调用的恢复方法不应进入用户可撤销的编辑历史。
+    store.clearHistory();
+    renderLibrary();
+    render({ persist: false });
+    autosaveEnabled = true;
+
+    // 初始化通知系统
+    initNotifications();
+
+    // 数据恢复和 UI 就绪后再连接实时协作，避免远程事件覆盖未初始化状态。
+    initRealtime();
+  } catch (error) {
+    console.error('Project initialization failed:', error);
+    showNotification('项目加载失败，请刷新重试');
+  }
 }
 
 // 启动初始化
@@ -224,9 +205,20 @@ function initRealtime() {
     console.log('收到远程编辑:', data);
     clearTimeout(remoteEditTimer);
     remoteEditTimer = setTimeout(() => {
+      // 本地仍有未保存/保存中的修改时，不要先覆盖 currentProject，
+      // 让下一次保存使用旧 revision 触发乐观锁冲突。
+      if (projectAutosave.pending() || pendingConflictSnapshot) {
+        showNotification('检测到远程更新，本地修改将在保存时进行合并确认');
+        return;
+      }
       loadProject().then(() => {
-        render();
+        hydrateProjectData();
+        store.clearHistory();
+        updateProjectUI();
+        render({ persist: false });
         showRemoteAction(data);
+      }).catch((error) => {
+        console.error('Remote project refresh failed:', error);
       });
     }, 300);
   });
@@ -388,7 +380,8 @@ function getActionText(action) {
     'edit_timeline': '编辑了行程',
     'add_poll': '创建了投票',
     'vote': '参与了投票',
-    'add_comment': '添加了评论'
+    'add_comment': '添加了评论',
+    'project_updated': '更新了项目'
   };
   return actionMap[action] || '进行了操作';
 }
@@ -441,15 +434,276 @@ function timelineItemsFor(day) {
     .sort((a, b) => a.time.localeCompare(b.time));
 }
 
+function routeDepthsForDay(dayItems, connections) {
+  const dayItemIds = new Set(dayItems.map(item => item.id));
+  const parentsById = new Map(dayItems.map(item => [item.id, []]));
+
+  connections.forEach(connection => {
+    if (dayItemIds.has(connection.fromTimelineId) && dayItemIds.has(connection.toTimelineId)) {
+      parentsById.get(connection.toTimelineId).push(connection.fromTimelineId);
+    }
+  });
+
+  const depths = new Map();
+  const depthFor = itemId => {
+    if (depths.has(itemId)) return depths.get(itemId);
+    const parents = parentsById.get(itemId) || [];
+    const depth = parents.length ? Math.max(...parents.map(parentId => depthFor(parentId) + 1)) : 0;
+    depths.set(itemId, depth);
+    return depth;
+  };
+
+  dayItems.forEach(item => depthFor(item.id));
+  return depths;
+}
+
+function clampCanvasZoom(value) {
+  return Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, Math.round(value * 100) / 100));
+}
+
+function setCanvasZoom(value, { preserveCenter = true } = {}) {
+  const viewport = document.getElementById('board-viewport');
+  const zoomValue = document.getElementById('canvas-zoom-value');
+  const previousZoom = canvasZoom;
+  canvasZoom = clampCanvasZoom(value);
+
+  let centerX = 0;
+  let centerY = 0;
+  if (viewport && preserveCenter) {
+    centerX = (viewport.scrollLeft + viewport.clientWidth / 2) / previousZoom;
+    centerY = (viewport.scrollTop + viewport.clientHeight / 2) / previousZoom;
+  }
+
+  timeline.style.zoom = String(canvasZoom);
+  if (zoomValue) zoomValue.textContent = `${Math.round(canvasZoom * 100)}%`;
+  localStorage.setItem(`travel-canvas-zoom-${currentProjectId || 'default'}`, String(canvasZoom));
+
+  requestAnimationFrame(() => {
+    if (viewport && preserveCenter) {
+      viewport.scrollLeft = Math.max(0, centerX * canvasZoom - viewport.clientWidth / 2);
+      viewport.scrollTop = Math.max(0, centerY * canvasZoom - viewport.clientHeight / 2);
+    }
+    renderRouteLines();
+  });
+}
+
+function bindCanvasPan(viewport) {
+  let panState = null;
+
+  const isInteractiveTarget = target => target instanceof Element && Boolean(target.closest([
+    '.timeline-card',
+    'button',
+    'input',
+    'textarea',
+    'select',
+    'a',
+    '[role="button"]',
+    '.route-line',
+    '.route-voter-badge',
+    '.route-remove-control',
+  ].join(', ')));
+
+  viewport.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || isInteractiveTarget(event.target)) return;
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const isOnScrollbar = event.clientX >= viewportRect.left + viewport.clientWidth
+      || event.clientY >= viewportRect.top + viewport.clientHeight;
+    if (isOnScrollbar) return;
+
+    panState = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add('is-panning');
+    event.preventDefault();
+  });
+
+  viewport.addEventListener('pointermove', event => {
+    if (!panState || event.pointerId !== panState.pointerId) return;
+    viewport.scrollLeft = panState.scrollLeft - (event.clientX - panState.clientX);
+    viewport.scrollTop = panState.scrollTop - (event.clientY - panState.clientY);
+  });
+
+  const finishPan = event => {
+    if (!panState || event.pointerId !== panState.pointerId) return;
+    panState = null;
+    viewport.classList.remove('is-panning');
+    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+  };
+
+  viewport.addEventListener('pointerup', finishPan);
+  viewport.addEventListener('pointercancel', finishPan);
+  viewport.addEventListener('lostpointercapture', () => {
+    panState = null;
+    viewport.classList.remove('is-panning');
+  });
+}
+
+function initCanvasControls() {
+  const viewport = document.getElementById('board-viewport');
+  const zoomOut = document.getElementById('canvas-zoom-out');
+  const zoomIn = document.getElementById('canvas-zoom-in');
+  const zoomValue = document.getElementById('canvas-zoom-value');
+  const zoomFit = document.getElementById('canvas-zoom-fit');
+  if (!viewport || !zoomOut || !zoomIn || !zoomValue || !zoomFit) return;
+
+  zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - CANVAS_ZOOM_STEP));
+  zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + CANVAS_ZOOM_STEP));
+  zoomValue.addEventListener('click', () => setCanvasZoom(1));
+  zoomFit.addEventListener('click', () => {
+    const fittedZoom = (viewport.clientWidth - 28) / timeline.clientWidth;
+    setCanvasZoom(fittedZoom, { preserveCenter: false });
+    requestAnimationFrame(() => {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    });
+  });
+
+  viewport.addEventListener('wheel', event => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    setCanvasZoom(canvasZoom + (event.deltaY < 0 ? CANVAS_ZOOM_STEP : -CANVAS_ZOOM_STEP));
+  }, { passive: false });
+
+  viewport.addEventListener('keydown', event => {
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      setCanvasZoom(canvasZoom + CANVAS_ZOOM_STEP);
+    } else if (event.key === '-') {
+      event.preventDefault();
+      setCanvasZoom(canvasZoom - CANVAS_ZOOM_STEP);
+    } else if (event.key === '0') {
+      event.preventDefault();
+      setCanvasZoom(1);
+    }
+  });
+
+  bindCanvasPan(viewport);
+  setCanvasZoom(canvasZoom, { preserveCenter: false });
+}
+
+function bindCanvasCardDrag(card, item) {
+  card.draggable = false;
+  const initialX = Number.isFinite(Number(item.canvasX)) ? Number(item.canvasX) : 0;
+  const initialY = Number.isFinite(Number(item.canvasY)) ? Number(item.canvasY) : 0;
+  card.dataset.canvasX = String(initialX);
+  card.dataset.canvasY = String(initialY);
+  card.style.setProperty('--canvas-x', `${initialX}px`);
+  card.style.setProperty('--canvas-y', `${initialY}px`);
+  card.querySelector('img')?.setAttribute('draggable', 'false');
+
+  let dragState = null;
+  let routeRenderTimer = null;
+  card.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('button, input, textarea, a, [role="button"]')) return;
+    const startX = Number(card.dataset.canvasX) || 0;
+    const startY = Number(card.dataset.canvasY) || 0;
+    const cardRect = card.getBoundingClientRect();
+    const timelineRect = timeline.getBoundingClientRect();
+    dragState = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      startX,
+      startY,
+      baseLeft: (cardRect.left - timelineRect.left) / canvasZoom - startX,
+      baseTop: (cardRect.top - timelineRect.top) / canvasZoom - startY,
+      moved: false,
+    };
+    card.setPointerCapture(event.pointerId);
+    card.classList.add('canvas-moving');
+    event.preventDefault();
+  });
+
+  card.addEventListener('pointermove', event => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const deltaX = (event.clientX - dragState.clientX) / canvasZoom;
+    const deltaY = (event.clientY - dragState.clientY) / canvasZoom;
+    const maxX = timeline.clientWidth - card.offsetWidth - 16 - dragState.baseLeft;
+    const maxY = timeline.clientHeight - card.offsetHeight - 16 - dragState.baseTop;
+    const nextX = Math.min(maxX, Math.max(16 - dragState.baseLeft, dragState.startX + deltaX));
+    const nextY = Math.min(maxY, Math.max(16 - dragState.baseTop, dragState.startY + deltaY));
+    dragState.moved ||= Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2;
+    card.dataset.canvasX = String(Math.round(nextX));
+    card.dataset.canvasY = String(Math.round(nextY));
+    card.style.setProperty('--canvas-x', `${nextX}px`);
+    card.style.setProperty('--canvas-y', `${nextY}px`);
+    clearTimeout(routeRenderTimer);
+    routeRenderTimer = setTimeout(renderRouteLines, 0);
+  });
+
+  const finishDrag = (event, { cancelled = false } = {}) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const { moved, startX, startY } = dragState;
+    dragState = null;
+    clearTimeout(routeRenderTimer);
+    card.classList.remove('canvas-moving');
+    if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
+    if (cancelled) {
+      card.dataset.canvasX = String(startX);
+      card.dataset.canvasY = String(startY);
+      card.style.setProperty('--canvas-x', `${startX}px`);
+      card.style.setProperty('--canvas-y', `${startY}px`);
+      renderRouteLines();
+    } else if (moved) {
+      card.dataset.justDragged = 'true';
+      store.editTimelineItem({
+        timelineId: item.id,
+        canvasX: Number(card.dataset.canvasX),
+        canvasY: Number(card.dataset.canvasY),
+        editor,
+      });
+      render();
+    }
+  };
+  card.addEventListener('pointerup', finishDrag);
+  card.addEventListener('pointercancel', event => finishDrag(event, { cancelled: true }));
+}
+
 function createTimelineCard(item) {
   const card = document.createElement('article');
   card.className = 'timeline-card';
   card.dataset.timelineId = item.id;
-  card.draggable = true;
-  
-  const poll = store.snapshot().polls.find(p => p.timelineItemId === item.id);
+  card.dataset.category = item.category || 'default';
+  card.draggable = false;
+  card.tabIndex = 0;
+  card.setAttribute('aria-label', `${item.name}，单击查看详情，拖动可移动`);
+
+  const snapshot = store.snapshot();
+  const poll = snapshot.polls.find(p => p.timelineItemId === item.id);
+  const timelineById = new Map(snapshot.timeline.map(timelineItem => [timelineItem.id, timelineItem]));
+  const outgoingRoutes = snapshot.connections
+    .filter(connection => connection.fromTimelineId === item.id)
+    .map(connection => ({ connection, target: timelineById.get(connection.toTimelineId) }))
+    .filter(route => route.target);
+  const incomingRoutes = snapshot.connections
+    .filter(connection => connection.toTimelineId === item.id)
+    .map(connection => ({ connection, source: timelineById.get(connection.fromTimelineId) }))
+    .filter(route => route.source);
+  card.classList.toggle('route-source', outgoingRoutes.length > 0);
+  const routeSummaryHtml = outgoingRoutes.length || incomingRoutes.length
+    ? `<div class="route-summary">
+        ${incomingRoutes.map(route => `<span>← 从 ${escapeHtml(route.source.name)} 来</span>`).join('')}
+        ${outgoingRoutes.map(route => `
+          <span class="route-outgoing">
+            <button class="route-vote-btn" type="button" data-connection-id="${escapeHtml(route.connection.id)}"
+              aria-pressed="${Object.hasOwn(route.connection.votes || {}, editor.id)}" title="为这条下一站路线投票">
+              接着去 ${escapeHtml(route.target.name)} →
+            </button>
+            <button class="remove-route-btn" type="button" data-connection-id="${escapeHtml(route.connection.id)}"
+              aria-label="移除前往 ${escapeHtml(route.target.name)} 的连线" title="移除这条下一站连线">×</button>
+          </span>
+        `).join('')}
+      </div>`
+    : '';
+
   const pollHtml = poll ? renderPollCard(poll) : `<button class="poll-btn" data-timeline-id="${item.id}">发起投票</button>`;
-  const timeConflicts = findTimeConflicts(store.snapshot().timeline, item);
+  const timeConflicts = findTimeConflicts(snapshot.timeline, item);
   const timeConflictHtml = timeConflicts.length
     ? `<p class="time-conflict" role="alert">时间冲突：${timeConflicts.map((conflict) => conflict.name).join('、')} 也安排在 ${item.time}</p>`
     : '';
@@ -480,7 +734,8 @@ function createTimelineCard(item) {
       <input class="note" aria-label="${noteAriaLabel}" value="${safeNote}" placeholder="添加同行备注">
       ${locationInfo}
       <button class="pick-location-btn" type="button">📍 选择位置</button>
-      <button class="branch-btn" type="button" title="添加分支选项"> 分叉</button>
+      <button class="branch-btn" type="button" title="添加需要投票选择的备选项">备选分叉</button>
+      ${routeSummaryHtml}
       ${timeConflictHtml}
       <div class="poll-section">${pollHtml}</div>
       <div class="comments-section" data-timeline-id="${escapeHtml(item.id)}">
@@ -489,7 +744,7 @@ function createTimelineCard(item) {
       </div>
     </div>
     <span class="drag-handle" aria-label="可拖动"></span>
-    <span class="branch-connector" title="拖拽到另一个行程项创建分叉"></span>
+    <span class="route-connector" role="button" aria-label="从 ${safeName} 创建下一站连线" title="拖到下一站，表示玩完这里接着去那里"></span>
   `;
 
   const [timeInput, noteInput] = card.querySelectorAll('input');
@@ -500,6 +755,26 @@ function createTimelineCard(item) {
   noteInput.addEventListener('change', () => {
     store.editTimelineItem({ timelineId: item.id, note: noteInput.value, editor });
     render();
+  });
+
+  const openDetailsFromCard = event => {
+    if (card.dataset.justDragged === 'true') return;
+    if (event.target.closest('button, input, textarea, select, a, [role="button"]')) return;
+    openTimelineItemDetail(item.id);
+  };
+  card.addEventListener('click', openDetailsFromCard);
+  card.addEventListener('keydown', event => {
+    if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    openTimelineItemDetail(item.id);
+  });
+
+  card.querySelectorAll('.route-vote-btn').forEach((button) => {
+    button.addEventListener('click', () => voteForConnection(button.dataset.connectionId));
+  });
+
+  card.querySelectorAll('.remove-route-btn').forEach((button) => {
+    button.addEventListener('click', () => removeTimelineConnection(button.dataset.connectionId));
   });
 
   // 地图选点
@@ -548,14 +823,12 @@ function createTimelineCard(item) {
       list.querySelectorAll('.branch-block-option').forEach(el => {
         el.addEventListener('click', () => {
           const blockId = el.dataset.blockId;
-          const oldId = item.id;
-          store.createBranch({
-            day: item.day,
-            time: item.time,
-            blockIds: [item.blockId, blockId],
-            editor,
-          });
-          store.removeTimelineItem({ timelineId: oldId, editor });
+          try {
+            store.createBranchFromTimelineItem({ timelineId: item.id, blockId, editor });
+          } catch (error) {
+            alert(error.message);
+            return;
+          }
           dialog.close();
           render();
         });
@@ -649,96 +922,45 @@ function createTimelineCard(item) {
     }
   });
 
-  // Drag and drop for reordering and cross-day moves
-  card.addEventListener('dragstart', (event) => {
-    event.stopPropagation();
-    card.classList.add('dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/timeline-item', item.id);
-  });
-
-  card.addEventListener('dragend', () => {
-    card.classList.remove('dragging');
-    document.querySelectorAll('.timeline-card.drag-over').forEach(c => c.classList.remove('drag-over'));
-  });
-
-  card.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const draggingItem = document.querySelector('.timeline-card.dragging');
-    if (draggingItem && draggingItem !== card) {
-      card.classList.add('drag-over');
-    }
-  });
-
-  card.addEventListener('dragleave', () => {
-    card.classList.remove('drag-over');
-  });
-
-  card.addEventListener('drop', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    card.classList.remove('drag-over');
-
-    const draggedItemId = event.dataTransfer.getData('text/timeline-item');
-    if (!draggedItemId || draggedItemId === item.id) return;
-
-    // Get the day of the target card
-    const targetDay = item.day;
-
-    // Get all items in this day
-    const dayItems = timelineItemsFor(targetDay);
-    const targetIndex = dayItems.findIndex(i => i.id === item.id);
-
-    if (targetIndex === -1) return;
-
-    // Move the item
-    store.moveTimelineItem({ timelineId: draggedItemId, day: targetDay, editor });
-
-    // Reorder
-    store.reorderTimeline({ timelineId: draggedItemId, newIndex: targetIndex, day: targetDay, editor });
-
-    render();
-  });
+  bindCanvasCardDrag(card, item);
   
   const pollBtn = card.querySelector('.poll-btn');
   if (pollBtn) {
     pollBtn.addEventListener('click', () => {
-      const question = prompt('投票问题：');
-      if (question?.trim()) {
-        const rawOptions = prompt('投票选项（用逗号分隔）：', '赞成,反对');
-        if (rawOptions === null) return;
-        const options = rawOptions.split(',').map((option) => option.trim()).filter(Boolean);
-        const rawDeadline = prompt('投票截止时间（YYYY-MM-DD HH:mm，留空表示不截止）：', '');
-        if (rawDeadline === null) return;
-        const deadlineAt = rawDeadline.trim() ? rawDeadline.trim().replace(' ', 'T') : null;
+      const dialog = document.getElementById('poll-dialog');
+      const form = document.getElementById('poll-form');
+      document.getElementById('poll-question').value = '';
+      document.getElementById('poll-options').value = '';
+      document.getElementById('poll-deadline').value = '';
+
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        const question = document.getElementById('poll-question').value.trim();
+        const rawOptions = document.getElementById('poll-options').value.trim();
+        const deadlineVal = document.getElementById('poll-deadline').value;
+        if (!question || !rawOptions) return;
+        const options = rawOptions.split('\n').map(s => s.trim()).filter(Boolean);
+        if (options.length < 2) { alert('至少需要两个选项'); return; }
+        const deadlineAt = deadlineVal ? new Date(deadlineVal).toISOString() : null;
         try {
           store.createPoll({ question, timelineItemId: item.id, creator: editor, options, deadlineAt });
-        } catch (error) {
-          alert(error.message);
-          return;
-        }
+        } catch (error) { alert(error.message); return; }
+        dialog.close();
         render();
-      }
+      };
+
+      dialog.showModal();
     });
   }
   
-  card.querySelectorAll('.vote-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const pollId = btn.dataset.pollId;
-      const choice = btn.dataset.choice;
-      const comment = prompt('添加投票评论（可选）：');
-      store.vote({ pollId, voter: editor, choice, comment: comment || undefined });
-      render();
-    });
-  });
+  bindPollVoteHandlers(card);
   
   return card;
 }
 
 function renderPollCard(poll) {
   const results = store.getPollResults(poll.id);
-  const userVote = poll.votes[editor.id];
+  const userVote = poll.votes?.[editor.id];
   const total = results.total || 1;
   const pollIsOpen = store.isPollOpen(poll.id);
   const deadline = poll.deadlineAt
@@ -752,10 +974,11 @@ function renderPollCard(poll) {
     const percent = Math.round((count / total) * 100);
     const barWidth = Math.round((count / maxCount) * 100);
     const voted = userVote === option ? 'voted' : '';
+    const optionLabel = poll.optionLabels?.[option] || option;
     return `
       <div class="poll-option-row">
-        <button class="vote-btn ${voted}" data-poll-id="${poll.id}" data-choice="${escapeHtml(option)}" ${pollIsOpen ? '' : 'disabled'}>
-          ${escapeHtml(option)}
+        <button class="vote-btn ${voted}" data-poll-id="${escapeHtml(poll.id)}" data-choice="${escapeHtml(option)}" aria-pressed="${userVote === option}" ${pollIsOpen ? '' : 'disabled'}>
+          ${escapeHtml(optionLabel)}
         </button>
         <div class="poll-chart">
           <div class="poll-bar" style="width: ${barWidth}%"></div>
@@ -787,6 +1010,23 @@ function renderPollCard(poll) {
   `;
 }
 
+function bindPollVoteHandlers(root) {
+  root.querySelectorAll('.vote-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      try {
+        store.vote({
+          pollId: button.dataset.pollId,
+          voter: editor,
+          choice: button.dataset.choice,
+        });
+        render();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -796,52 +1036,135 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+const travelCategoryLabels = {
+  scenic: '景点',
+  food: '美食',
+  hotel: '住宿',
+  transport: '交通',
+  shopping: '购物',
+  activity: '活动',
+};
+
+function openTravelDetail(item, { scheduled = false, city = '' } = {}) {
+  const dialog = document.getElementById('travel-detail-dialog');
+  const image = document.getElementById('travel-detail-image');
+  const category = travelCategoryLabels[item.category] || '旅行灵感';
+  const knownCity = city || travelBlocks.find(block => block.name === item.name)?.city || '';
+
+  image.src = item.image || '';
+  image.alt = `${item.name} 的图片`;
+  image.onerror = () => {
+    image.removeAttribute('src');
+    image.classList.add('is-placeholder');
+  };
+  image.classList.toggle('is-placeholder', !item.image);
+  document.getElementById('travel-detail-category').textContent = category;
+  document.getElementById('travel-detail-title').textContent = item.name;
+
+  const badges = [knownCity, item.price].filter(Boolean);
+  document.getElementById('travel-detail-badges').innerHTML = badges
+    .map(value => `<span>${escapeHtml(value)}</span>`)
+    .join('');
+  document.getElementById('travel-detail-description').textContent = item.description || '暂未添加详细介绍，可以先把它放进行程，再和同行人一起补充。';
+
+  const detailRows = [];
+  if (scheduled) {
+    const day = days.find(candidate => candidate.id === Number(item.day));
+    detailRows.push(['行程日期', day?.title || `第 ${item.day} 天`]);
+    if (item.time) detailRows.push(['计划时间', item.time]);
+    if (item.note) detailRows.push(['同行备注', item.note]);
+  }
+  if (item.lat != null && item.lng != null) {
+    detailRows.push(['位置坐标', `${Number(item.lat).toFixed(4)}, ${Number(item.lng).toFixed(4)}`]);
+  }
+  document.getElementById('travel-detail-facts').innerHTML = detailRows
+    .map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+    .join('');
+
+  dialog.showModal();
+}
+
+function openTimelineItemDetail(timelineId) {
+  const item = store.snapshot().timeline.find(candidate => candidate.id === timelineId);
+  if (item) openTravelDetail(item, { scheduled: true });
+}
+
 function createBranchCard(items) {
   const wrapper = document.createElement('div');
   wrapper.className = 'branch-group';
-  const poll = store.snapshot().polls.find(p => p.timelineItemId === items[0].id);
+  const branchGroup = items[0]?.branchGroup;
+  const polls = store.snapshot().polls;
+  const poll = polls.find(p => p.branchGroup === branchGroup)
+    || polls.find(p => (
+      p.timelineItemId === items[0]?.id
+      && p.options.every(option => items.some(item => option === item.id || option === item.name))
+    ));
   const hasPoll = !!poll;
-  const winnerId = poll?.votes ? Object.entries(poll.votes).reduce((acc, [, vote]) => {
-    acc[vote] = (acc[vote] || 0) + 1;
-    return acc;
-  }, {}) : {};
+  const results = poll ? store.getPollResults(poll.id) : { total: 0 };
+  const maxVotes = poll
+    ? Math.max(...poll.options.map(option => results[option] || 0), 0)
+    : 0;
+  const userVote = poll?.votes?.[editor.id];
+  const pollStatus = !hasPoll
+    ? ''
+    : store.isPollOpen(poll.id)
+      ? (userVote ? '已投票' : '待投票')
+      : '已截止';
 
   wrapper.innerHTML = `
     <div class="branch-header">
       <span class="branch-icon">🔀</span>
       <span class="branch-label">路线选项（${items.length} 选 1）</span>
-      ${hasPoll ? '<span class="branch-voted">已投票</span>' : ''}
+      ${hasPoll ? `<span class="branch-voted">${pollStatus}</span>` : ''}
     </div>
     <div class="branch-options">
       ${items.map((item, i) => {
-        const isWinner = winnerId[item.name] && Object.values(winnerId).reduce((a, b) => Math.max(a, b), 0) === winnerId[item.name];
+        const choice = poll?.options.includes(item.id) ? item.id : item.name;
+        const voteCount = poll ? (results[choice] || 0) : 0;
+        const isLeading = maxVotes > 0 && voteCount === maxVotes;
         return `
-          <div class="branch-option ${isWinner ? 'branch-winner' : ''}">
+          <div class="branch-option ${isLeading ? 'branch-winner' : ''}">
             <span class="branch-letter">${String.fromCharCode(65 + i)}</span>
             <span class="branch-name">${escapeHtml(item.name)}</span>
+            <span class="branch-time">${escapeHtml(item.time || '')}</span>
             ${item.price ? `<span class="branch-price">${escapeHtml(item.price)}</span>` : ''}
+            ${poll && results.total ? `<span class="branch-result">${voteCount} 票</span>` : ''}
           </div>
         `;
       }).join('')}
     </div>
-    ${!hasPoll ? `<button class="branch-vote-btn" data-branch-group="${escapeHtml(items[0].branchGroup)}">发起投票决定</button>` : ''}
+    ${hasPoll
+      ? renderPollCard(poll)
+      : `<button class="branch-vote-btn" data-branch-group="${escapeHtml(branchGroup)}">发起投票决定</button>`}
   `;
 
   const voteBtn = wrapper.querySelector('.branch-vote-btn');
   if (voteBtn) {
     voteBtn.addEventListener('click', () => {
       const question = `路线选择：${items.map(i => i.name).join(' 还是 ')}`;
-      const options = items.map(i => i.name);
-      store.createPoll({ question, timelineItemId: items[0].id, creator: editor, options });
+      const options = items.map(i => i.id);
+      const optionLabels = Object.fromEntries(items.map(i => [i.id, i.name]));
+      store.createPoll({
+        question,
+        timelineItemId: items[0].id,
+        branchGroup,
+        creator: editor,
+        options,
+        optionLabels,
+      });
       render();
     });
   }
+
+  if (poll) bindPollVoteHandlers(wrapper);
 
   return wrapper;
 }
 
 function renderTimeline() {
+  const connectorLayer = document.getElementById('route-lines');
   timeline.replaceChildren();
+  if (connectorLayer) timeline.append(connectorLayer);
   const template = document.querySelector('#timeline-day-template');
 
   for (const day of days) {
@@ -855,6 +1178,16 @@ function renderTimeline() {
     column.id = `day-${day.id}`;
 
     const dayItems = timelineItemsFor(day.id);
+    column.classList.toggle('is-empty', dayItems.length === 0);
+    const routeDepths = routeDepthsForDay(dayItems, store.snapshot().connections);
+    const levelElements = new Map();
+    [...new Set(routeDepths.values())].sort((a, b) => a - b).forEach(depth => {
+      const level = document.createElement('div');
+      level.className = 'route-level';
+      level.dataset.routeLevel = String(depth);
+      levelElements.set(depth, level);
+      items.append(level);
+    });
     const rendered = new Set();
 
     for (const item of dayItems) {
@@ -864,9 +1197,9 @@ function renderTimeline() {
         // 渲染分支组
         const branchItems = dayItems.filter(t => t.branchGroup === item.branchGroup);
         branchItems.forEach(t => rendered.add(t.id));
-        items.append(createBranchCard(branchItems));
+        levelElements.get(routeDepths.get(item.id) || 0)?.append(createBranchCard(branchItems));
       } else {
-        items.append(createTimelineCard(item));
+        levelElements.get(routeDepths.get(item.id) || 0)?.append(createTimelineCard(item));
       }
     }
 
@@ -892,16 +1225,27 @@ function renderTimeline() {
       }
     });
     fragment.querySelector('.add-slot').addEventListener('click', () => {
-      const name = prompt('行程名称：');
-      if (!name?.trim()) return;
-      const time = prompt('时间（如 10:00）：', '10:00');
-      if (!time) return;
-      const block = store.createTravelBlock({ name: name.trim(), image: 'diannan-images/spots/建水古城.jpg' });
-      store.scheduleBlock({ blockId: block.id, day: day.id, time: time.trim(), editor });
-      render();
+      const dialog = document.getElementById('add-slot-dialog');
+      const form = document.getElementById('add-slot-form');
+      document.getElementById('slot-name').value = '';
+      document.getElementById('slot-time').value = '10:00';
+
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        const name = document.getElementById('slot-name').value.trim();
+        const time = document.getElementById('slot-time').value;
+        if (!name || !time) return;
+        const block = store.createTravelBlock({ name, image: 'diannan-images/spots/建水古城.jpg' });
+        store.scheduleBlock({ blockId: block.id, day: day.id, time, editor });
+        dialog.close();
+        render();
+      };
+
+      dialog.showModal();
     });
     timeline.append(fragment);
   }
+  requestAnimationFrame(renderRouteLines);
 }
 
 function renderLibrary(query = '') {
@@ -916,6 +1260,9 @@ function renderLibrary(query = '') {
       element.className = 'travel-block';
       element.draggable = true;
       element.dataset.blockId = block.id;
+      element.tabIndex = 0;
+      element.setAttribute('role', 'button');
+      element.setAttribute('aria-label', `${block.name}，单击查看详情，拖动可加入行程`);
       const categoryIcons = { scenic: '🏞️', food: '🍜', hotel: '🏨', transport: '🚗', shopping: '️', activity: '🎯' };
       const categoryIcon = categoryIcons[block.category] || '';
       const priceTag = block.price ? `<span class="block-price">${escapeHtml(block.price)}</span>` : '';
@@ -929,7 +1276,7 @@ function renderLibrary(query = '') {
           ${descPreview}
           <small>${escapeHtml(block.city || '')}</small>
         </div>
-        <button class="delete-block-btn" data-block-id="${escapeHtml(block.id)}" type="button" title="删除">×</button>
+        <button class="delete-block-btn" data-block-id="${escapeHtml(block.id)}" type="button" aria-label="删除 ${escapeHtml(block.name)}"></button>
       `;
       element.querySelector('.delete-block-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -939,7 +1286,18 @@ function renderLibrary(query = '') {
           renderLibrary(document.querySelector('#search-blocks').value);
         }
       });
+      let wasDragged = false;
+      element.addEventListener('click', event => {
+        if (wasDragged || event.target.closest('button')) return;
+        openTravelDetail(block, { city: block.city });
+      });
+      element.addEventListener('keydown', event => {
+        if (event.target !== element || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        openTravelDetail(block, { city: block.city });
+      });
       element.addEventListener('dragstart', (event) => {
+        wasDragged = true;
         draggedBlockId = block.id;
         element.classList.add('dragging');
         event.dataTransfer.effectAllowed = 'copy';
@@ -948,6 +1306,7 @@ function renderLibrary(query = '') {
       element.addEventListener('dragend', () => {
         draggedBlockId = null;
         element.classList.remove('dragging');
+        setTimeout(() => { wasDragged = false; }, 0);
       });
       library.append(element);
     });
@@ -966,6 +1325,12 @@ function renderActivity() {
       ? '把旅行块排进了行程'
       : event.type === 'timeline.moved'
         ? '调整了行程时间'
+        : event.type === 'timeline.connected'
+          ? '连接了下一站'
+          : event.type === 'timeline.disconnected'
+            ? '移除了下一站连线'
+            : event.type === 'timeline.connection_voted'
+              ? '为下一站路线投了票'
         : event.type === 'ai.draft.imported'
           ? '审核并导入了 AI 整理的旅行块'
           : '更新了行程备注';
@@ -984,6 +1349,7 @@ function render({ persist = autosaveEnabled } = {}) {
 function switchView(view) {
   currentView = view;
   const timeline = document.getElementById('timeline');
+  const boardShell = document.querySelector('.board-shell');
   const mapContainer = document.getElementById('map-container');
   const helper = document.querySelector('.itinerary .helper');
   const viewButtons = document.querySelectorAll('.view-switch button');
@@ -994,12 +1360,13 @@ function switchView(view) {
 
   if (view === 'timeline') {
     timeline.style.display = '';
+    if (boardShell) boardShell.style.display = '';
     mapContainer.style.display = 'none';
     if (helper) helper.style.display = '';
     destroyMap();
     mapViewInitialized = false;
   } else if (view === 'map') {
-    timeline.style.display = 'none';
+    if (boardShell) boardShell.style.display = 'none';
     mapContainer.style.display = '';
     if (helper) helper.style.display = 'none';
     renderMapView();
@@ -1032,18 +1399,186 @@ function renderMapView() {
   });
 }
 
-// 分叉连线拖拽
-(function initBranchConnector() {
-  const svg = document.getElementById('branch-lines');
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+function resetRouteLayer(svg) {
+  svg.replaceChildren();
+  const defs = document.createElementNS(SVG_NAMESPACE, 'defs');
+  const marker = document.createElementNS(SVG_NAMESPACE, 'marker');
+  marker.id = 'route-arrowhead';
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '9');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '6');
+  marker.setAttribute('markerHeight', '6');
+  marker.setAttribute('orient', 'auto-start-reverse');
+  const arrow = document.createElementNS(SVG_NAMESPACE, 'path');
+  arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+  arrow.setAttribute('fill', '#255f4d');
+  marker.append(arrow);
+  defs.append(marker);
+  svg.append(defs);
+}
+
+function routeGeometryBetween(sourceCard, targetCard, timelineRect, fanIndex = 0) {
+  const sourceRect = sourceCard.getBoundingClientRect();
+  const targetRect = targetCard.getBoundingClientRect();
+  const startX = (sourceRect.left + sourceRect.width / 2 - timelineRect.left) / canvasZoom;
+  const startY = (sourceRect.bottom - timelineRect.top) / canvasZoom;
+  const endX = (targetRect.left + targetRect.width / 2 - timelineRect.left) / canvasZoom;
+  const endY = (targetRect.top - timelineRect.top) / canvasZoom;
+
+  if (endY >= startY) {
+    const middleY = startY + (endY - startY) / 2 + fanIndex * 8;
+    return {
+      d: `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`,
+      labelX: (startX + endX) / 2,
+      labelY: middleY,
+    };
+  }
+
+  const bendX = (Math.max(sourceRect.right, targetRect.right) - timelineRect.left) / canvasZoom + 34 + fanIndex * 12;
+  const bendY = (Math.max(sourceRect.bottom, targetRect.bottom) - timelineRect.top) / canvasZoom + 28 + fanIndex * 8;
+  return {
+    d: `M ${startX} ${startY} C ${startX} ${bendY}, ${bendX} ${bendY}, ${bendX} ${bendY} L ${bendX} ${endY - 24} C ${bendX} ${endY - 8}, ${endX} ${endY - 8}, ${endX} ${endY}`,
+    labelX: bendX,
+    labelY: (bendY + endY) / 2,
+  };
+}
+
+function connectionVoterNames(connection) {
+  return Object.entries(connection.votes || {}).map(([voterId, voter]) => (
+    typeof voter === 'string' ? voter : voter?.name || voterId
+  ));
+}
+
+function voteForConnection(connectionId) {
+  try {
+    store.voteConnection({ connectionId, voter: editor });
+    render();
+  } catch (error) {
+    showNotification(error.message);
+  }
+}
+
+function removeTimelineConnection(connectionId) {
+  try {
+    store.disconnectTimelineItems({ connectionId, editor });
+    render();
+  } catch (error) {
+    showNotification(error.message);
+  }
+}
+
+function renderRouteLines() {
+  const svg = document.getElementById('route-lines');
+  if (!svg || !svg.isConnected) return;
+  const timelineRect = timeline.getBoundingClientRect();
+  if (!timelineRect.width || !timelineRect.height) return;
+
+  svg.setAttribute('viewBox', `0 0 ${timeline.clientWidth} ${timeline.clientHeight}`);
+  resetRouteLayer(svg);
+  const outgoingIndex = new Map();
+  const snapshot = store.snapshot();
+  const timelineById = new Map(snapshot.timeline.map(item => [item.id, item]));
+
+  snapshot.connections.forEach((connection) => {
+    const sourceCard = timeline.querySelector(`[data-timeline-id="${CSS.escape(connection.fromTimelineId)}"]`);
+    const targetCard = timeline.querySelector(`[data-timeline-id="${CSS.escape(connection.toTimelineId)}"]`);
+    if (!sourceCard || !targetCard) return;
+
+    const fanIndex = outgoingIndex.get(connection.fromTimelineId) || 0;
+    outgoingIndex.set(connection.fromTimelineId, fanIndex + 1);
+    const geometry = routeGeometryBetween(sourceCard, targetCard, timelineRect, fanIndex);
+
+    const hitPath = document.createElementNS(SVG_NAMESPACE, 'path');
+    hitPath.classList.add('route-line-hit');
+    hitPath.dataset.connectionId = connection.id;
+    hitPath.setAttribute('d', geometry.d);
+    hitPath.addEventListener('click', () => voteForConnection(connection.id));
+    svg.append(hitPath);
+
+    const path = document.createElementNS(SVG_NAMESPACE, 'path');
+    path.classList.add('route-line');
+    path.dataset.connectionId = connection.id;
+    path.setAttribute('d', geometry.d);
+    path.setAttribute('marker-end', 'url(#route-arrowhead)');
+    const title = document.createElementNS(SVG_NAMESPACE, 'title');
+    title.textContent = `${timelineById.get(connection.fromTimelineId)?.name || '上一站'} → ${timelineById.get(connection.toTimelineId)?.name || '下一站'}`;
+    path.append(title);
+    svg.append(path);
+
+    const voterNames = connectionVoterNames(connection);
+    let voterBadgeWidth = 0;
+    if (voterNames.length) {
+      const visibleNames = voterNames.slice(0, 3);
+      const label = `${visibleNames.join('、')}${voterNames.length > 3 ? ` +${voterNames.length - 3}` : ''}`;
+      const width = Math.max(42, label.length * 11 + 14);
+      voterBadgeWidth = width;
+      const preferredX = geometry.labelX - width / 2;
+      const x = Math.max(4, Math.min(preferredX, timeline.clientWidth - width - 4));
+      const y = geometry.labelY - 10;
+      const badge = document.createElementNS(SVG_NAMESPACE, 'g');
+      badge.classList.add('route-voter-badge');
+      badge.dataset.connectionId = connection.id;
+      badge.setAttribute('role', 'button');
+      badge.setAttribute('tabindex', '0');
+      badge.setAttribute('aria-label', `${label} 投给这条路线；点击修改投票`);
+      const background = document.createElementNS(SVG_NAMESPACE, 'rect');
+      background.setAttribute('x', x);
+      background.setAttribute('y', y);
+      background.setAttribute('width', width);
+      background.setAttribute('height', '20');
+      background.setAttribute('rx', '10');
+      const text = document.createElementNS(SVG_NAMESPACE, 'text');
+      text.setAttribute('x', x + 7);
+      text.setAttribute('y', y + 14);
+      text.textContent = label;
+      badge.append(background, text);
+      badge.addEventListener('click', () => voteForConnection(connection.id));
+      badge.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') voteForConnection(connection.id);
+      });
+      svg.append(badge);
+    }
+
+    const removeControl = document.createElementNS(SVG_NAMESPACE, 'g');
+    const removeX = Math.min(timeline.clientWidth - 12, geometry.labelX + voterBadgeWidth / 2 + 13);
+    const removeY = geometry.labelY;
+    removeControl.classList.add('route-remove-control');
+    removeControl.dataset.connectionId = connection.id;
+    removeControl.setAttribute('role', 'button');
+    removeControl.setAttribute('tabindex', '0');
+    removeControl.setAttribute('aria-label', `取消 ${title.textContent} 的连接`);
+    const removeCircle = document.createElementNS(SVG_NAMESPACE, 'circle');
+    removeCircle.setAttribute('cx', removeX);
+    removeCircle.setAttribute('cy', removeY);
+    removeCircle.setAttribute('r', '9');
+    const removeText = document.createElementNS(SVG_NAMESPACE, 'text');
+    removeText.setAttribute('x', removeX);
+    removeText.setAttribute('y', removeY + 3.5);
+    removeText.textContent = '×';
+    removeControl.append(removeCircle, removeText);
+    removeControl.addEventListener('click', () => removeTimelineConnection(connection.id));
+    removeControl.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') removeTimelineConnection(connection.id);
+    });
+    svg.append(removeControl);
+  });
+}
+
+// 下一站连线拖拽：A → B 表示玩完 A 后接着去 B，可一对多。
+(function initRouteConnector() {
+  const svg = document.getElementById('route-lines');
   if (!svg) return;
 
   let dragging = false;
   let sourceCard = null;
   let sourceId = null;
-  let line = null;
+  let previewPath = null;
 
   document.addEventListener('mousedown', (e) => {
-    const connector = e.target.closest('.branch-connector');
+    const connector = e.target.closest('.route-connector');
     if (!connector) return;
     const card = connector.closest('.timeline-card');
     if (!card) return;
@@ -1056,71 +1591,80 @@ function renderMapView() {
 
     const rect = card.getBoundingClientRect();
     const timelineRect = document.getElementById('timeline').getBoundingClientRect();
-    const startX = rect.right - timelineRect.left;
-    const startY = rect.top + rect.height / 2 - timelineRect.top;
+    const startX = (rect.left + rect.width / 2 - timelineRect.left) / canvasZoom;
+    const startY = (rect.bottom - timelineRect.top) / canvasZoom;
 
-    svg.innerHTML = '';
+    renderRouteLines();
     svg.style.display = '';
-    svg.setAttribute('width', timelineRect.width);
-    svg.setAttribute('height', timelineRect.height);
-    svg.style.position = 'absolute';
-    svg.style.top = '0';
-    svg.style.left = '0';
-    svg.style.pointerEvents = 'none';
-
-    line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', startX);
-    line.setAttribute('y1', startY);
-    line.setAttribute('x2', startX);
-    line.setAttribute('y2', startY);
-    line.setAttribute('stroke', '#255f4d');
-    line.setAttribute('stroke-width', '2');
-    line.setAttribute('stroke-dasharray', '6,4');
-    svg.appendChild(line);
+    previewPath = document.createElementNS(SVG_NAMESPACE, 'path');
+    previewPath.classList.add('route-line', 'route-line-preview');
+    previewPath.dataset.startX = startX;
+    previewPath.dataset.startY = startY;
+    previewPath.setAttribute('d', `M ${startX} ${startY} L ${startX} ${startY}`);
+    previewPath.setAttribute('marker-end', 'url(#route-arrowhead)');
+    svg.append(previewPath);
     e.preventDefault();
   });
 
   document.addEventListener('mousemove', (e) => {
-    if (!dragging || !line) return;
+    if (!dragging || !previewPath) return;
     const timelineRect = document.getElementById('timeline').getBoundingClientRect();
-    const x = e.clientX - timelineRect.left;
-    const y = e.clientY - timelineRect.top;
-    line.setAttribute('x2', x);
-    line.setAttribute('y2', y);
+    const x = (e.clientX - timelineRect.left) / canvasZoom;
+    const y = (e.clientY - timelineRect.top) / canvasZoom;
+    const startX = Number(previewPath.dataset.startX);
+    const startY = Number(previewPath.dataset.startY);
+    const middleY = startY + (y - startY) / 2;
+    previewPath.setAttribute('d', `M ${startX} ${startY} C ${startX} ${middleY}, ${x} ${middleY}, ${x} ${y}`);
   });
 
   document.addEventListener('mouseup', (e) => {
     if (!dragging) return;
     dragging = false;
-    svg.innerHTML = '';
+    previewPath?.remove();
 
     const targetCard = document.elementFromPoint(e.clientX, e.clientY)?.closest('.timeline-card');
     if (targetCard && targetCard !== sourceCard) {
       const targetItem = store.snapshot().timeline.find(t => t.id === targetCard.dataset.timelineId);
-      if (targetItem && !targetItem.branchGroup && targetItem.day === store.snapshot().timeline.find(t => t.id === sourceId)?.day) {
-        const sourceItem = store.snapshot().timeline.find(t => t.id === sourceId);
-        if (sourceItem) {
-          store.createBranch({
-            day: sourceItem.day,
-            time: sourceItem.time,
-            blockIds: [sourceItem.blockId, targetItem.blockId],
+      if (targetItem && !targetItem.branchGroup) {
+        try {
+          store.connectTimelineItems({
+            fromTimelineId: sourceId,
+            toTimelineId: targetItem.id,
             editor,
           });
-          store.removeTimelineItem({ timelineId: sourceId, editor });
           render();
+        } catch (error) {
+          const message = error.message === 'Timeline connection already exists'
+            ? '这条下一站连线已经存在'
+            : error.message === 'Timeline connection would create a cycle'
+              ? '这条连线会形成循环路线'
+              : error.message;
+          showNotification(message);
+          renderRouteLines();
         }
       }
+    } else {
+      renderRouteLines();
     }
     sourceCard = null;
     sourceId = null;
-    line = null;
+    previewPath = null;
   });
 })();
+
+window.addEventListener('resize', () => requestAnimationFrame(renderRouteLines));
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
 document.querySelector('#invite-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());
 document.querySelectorAll('[data-close-dialog]').forEach((button) => {
   button.addEventListener('click', () => button.closest('dialog')?.close());
+});
+const travelDetailDialog = document.getElementById('travel-detail-dialog');
+travelDetailDialog?.addEventListener('click', event => {
+  const rect = travelDetailDialog.getBoundingClientRect();
+  const clickedBackdrop = event.clientX < rect.left || event.clientX > rect.right
+    || event.clientY < rect.top || event.clientY > rect.bottom;
+  if (clickedBackdrop) travelDetailDialog.close();
 });
 document.querySelector('#reload-conflict').addEventListener('click', () => window.location.reload());
 document.querySelector('#overwrite-conflict').addEventListener('click', async () => {
@@ -1293,7 +1837,7 @@ function initNotifications() {
 
 async function loadNotificationPreferences(form) {
   try {
-    const response = await fetch('/api/notification-preferences', { credentials: 'include' });
+    const response = await fetch(`${api.API_BASE}/api/notification-preferences`, { credentials: 'include' });
     if (!response.ok) throw new Error('获取通知设置失败');
     const { preferences } = await response.json();
     for (const key of ['mentions', 'polls', 'system']) {
@@ -1307,7 +1851,7 @@ async function loadNotificationPreferences(form) {
 
 async function saveNotificationPreferences(preferences) {
   try {
-    const response = await fetch('/api/notification-preferences', {
+    const response = await fetch(`${api.API_BASE}/api/notification-preferences`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -1324,7 +1868,7 @@ async function saveNotificationPreferences(preferences) {
 
 async function updateNotificationBadge() {
   try {
-    const response = await fetch('/api/notifications/unread-count', {
+    const response = await fetch(`${api.API_BASE}/api/notifications/unread-count`, {
       credentials: 'include'
     });
     
@@ -1346,7 +1890,7 @@ async function updateNotificationBadge() {
 
 async function loadNotifications() {
   try {
-    const response = await fetch('/api/notifications', {
+    const response = await fetch(`${api.API_BASE}/api/notifications`, {
       credentials: 'include'
     });
     
@@ -1384,7 +1928,7 @@ function renderNotifications(notifications) {
 
 async function markAsRead(notifId) {
   try {
-    const response = await fetch(`/api/notifications/${notifId}/read`, {
+    const response = await fetch(`${api.API_BASE}/api/notifications/${notifId}/read`, {
       method: 'POST',
       credentials: 'include'
     });
@@ -1406,7 +1950,7 @@ async function markAsRead(notifId) {
 
 async function markAllAsRead() {
   try {
-    const response = await fetch('/api/notifications/read-all', {
+    const response = await fetch(`${api.API_BASE}/api/notifications/read-all`, {
       method: 'POST',
       credentials: 'include'
     });
@@ -1443,5 +1987,6 @@ function formatTime(timestamp) {
   }
 }
 
+initCanvasControls();
 renderLibrary();
 render();

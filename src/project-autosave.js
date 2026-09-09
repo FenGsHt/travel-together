@@ -6,6 +6,7 @@ export function createProjectAutosave({ save, delay = 500, onError = console.err
   let timer = null;
   let nextSnapshot = null;
   let writeChain = Promise.resolve();
+  let pendingWrites = 0;
 
   function report(error) {
     onError(error);
@@ -17,9 +18,16 @@ export function createProjectAutosave({ save, delay = 500, onError = console.err
     const snapshot = nextSnapshot;
     nextSnapshot = null;
     timer = null;
+    pendingWrites += 1;
     writeChain = writeChain
       .catch(report)
-      .then(() => save(snapshot));
+      .then(async () => {
+        try {
+          return await save(snapshot);
+        } finally {
+          pendingWrites -= 1;
+        }
+      });
     return writeChain;
   }
 
@@ -38,7 +46,7 @@ export function createProjectAutosave({ save, delay = 500, onError = console.err
     },
 
     pending() {
-      return timer !== null;
+      return timer !== null || nextSnapshot !== null || pendingWrites > 0;
     },
   };
 }
