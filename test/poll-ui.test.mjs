@@ -11,7 +11,7 @@ test('poll UI collects custom options and an optional deadline', async () => {
 
   assert.match(html, /选项（每行一个）/);
   assert.match(html, /截止时间（可选）/);
-  assert.match(app, /options, deadlineAt/);
+  assert.match(app, /renderPollCard\(poll\)/);
 });
 
 test('poll UI renders every custom option and disables expired polls', async () => {
@@ -39,6 +39,50 @@ test('timeline rendering preserves the route connector SVG layer', async () => {
   assert.match(app, /store\.connectTimelineItems/);
 });
 
+test('day navigation is generated from the current itinerary instead of static city examples', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+
+  assert.match(html, /id="day-nav-list"/);
+  assert.doesNotMatch(html, /建水 → 元阳/);
+  assert.match(app, /function renderDayNavigation/);
+  assert.match(app, /function dayNavigationSummary/);
+  assert.match(app, /renderDayNavigation\(\);/);
+});
+
+test('map view renders positioned itinerary items and their valid route connections', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
+
+  assert.match(app, /import \{ initMap, addMarkers, addRouteLines, getDrivingRoute, destroyMap \}/);
+  assert.match(app, /addRouteLines\(snapshot\.connections, items\)/);
+  assert.match(mapView, /export function addRouteLines\(connections = \[\], items = \[\]\)/);
+  assert.match(mapView, /itemById\.get\(connection\.fromTimelineId\)/);
+  assert.match(mapView, /itemById\.get\(connection\.toTimelineId\)/);
+  assert.match(mapView, /new AMap\.Polyline/);
+});
+
+test('route lines show cached driving distance and duration when both blocks have locations', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
+
+  assert.match(app, /getDrivingRoute/);
+  assert.match(app, /function formatDrivingMetric/);
+  assert.match(app, /route-metric-badge/);
+  assert.match(mapView, /new AMap\.Driving/);
+  assert.match(mapView, /distance: Number\(route\.distance\)/);
+  assert.match(mapView, /duration: Number\(route\.time\)/);
+});
+
+test('cards hide the generic poll launch button and only hint when a route has multiple exits', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(app, /class="poll-btn"/);
+  assert.match(app, /const outgoingConnectionCount = snapshot\.connections/);
+  assert.match(app, /outgoingConnectionCount >= 2/);
+  assert.match(app, /点击对应连线投票/);
+});
+
 test('route votes render voter names directly on the connection line', async () => {
   const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 
@@ -48,15 +92,26 @@ test('route votes render voter names directly on the connection line', async () 
   assert.match(app, /route-line-hit/);
   assert.match(app, /route-remove-control/);
   assert.match(app, /removeTimelineConnection/);
+  assert.doesNotMatch(app, /routeSummaryHtml/);
+  assert.doesNotMatch(app, /接着去 \$\{escapeHtml/);
 });
 
-test('route arrows leave the previous card bottom and enter the next card top', async () => {
+test('route arrows support all four card edges and preserve bottom-to-top defaults', async () => {
   const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 
-  assert.match(app, /const startY = \(sourceRect\.bottom - timelineRect\.top\) \/ canvasZoom/);
-  assert.match(app, /const endY = \(targetRect\.top - timelineRect\.top\) \/ canvasZoom/);
-  assert.match(app, /sourceRect\.left \+ sourceRect\.width \/ 2/);
-  assert.match(app, /targetRect\.left \+ targetRect\.width \/ 2/);
+  assert.match(app, /const CARD_ROUTE_PORTS = \['top', 'right', 'bottom', 'left'\]/);
+  assert.match(app, /function cardRoutePortPoint/);
+  assert.match(app, /right: \{ x: rect\.right, y: rect\.top \+ rect\.height \/ 2 \}/);
+  assert.match(app, /left: \{ x: rect\.left, y: rect\.top \+ rect\.height \/ 2 \}/);
+  assert.match(app, /function routeGeometryBetween\(sourceCard, targetCard, timelineRect, fanIndex = 0, fromPort = 'bottom', toPort = 'top'\)/);
+  assert.match(app, /connection\.fromPort \|\| 'bottom'/);
+  assert.match(app, /connection\.toPort \|\| 'top'/);
+  assert.match(app, /fromPort: sourcePort/);
+  assert.match(app, /targetConnector\s*\? normalizeRoutePort\(targetConnector\.dataset\.routePort, 'top'\)/);
+  assert.match(app, /function nearestRoutePortForPoint/);
+  assert.match(app, /nearestRoutePortForPoint\(targetCard, e\.clientX, e\.clientY\)/);
+  assert.match(app, /const eventTarget = e\.target instanceof Element/);
+  assert.match(app, /eventTarget\?\.closest\('\.timeline-card'\)/);
 });
 
 test('the canvas uses compact travel blocks grouped by route depth', async () => {
@@ -88,4 +143,13 @@ test('the board exposes zoom controls and free-position pointer dragging', async
   assert.match(app, /openTimelineItemDetail\(item\.id\)/);
   assert.match(html, /id="travel-detail-dialog"/);
   assert.match(styles, /grid-template-columns: 64px minmax\(0, 1fr\)/);
+  assert.match(app, /class="timeline-delete-btn"/);
+  assert.match(app, /store\.removeTimelineItem\(\{ timelineId: item\.id, editor \}\)/);
+  assert.match(app, /function openMoveDayDialog/);
+  assert.match(app, /store\.moveTimelineItem\(\{ timelineId, day, editor \}\)/);
+  assert.match(html, /id="move-day-dialog"/);
+  assert.match(app, /class="move-day-btn"/);
+  assert.match(html, /id="slot-block-id"/);
+  assert.match(app, /const selectedBlock = blocks\.find\(block => block\.id === blockSelect\.value\)/);
+  assert.match(app, /store\.scheduleBlock\(\{ blockId, day: day\.id, time, editor \}\)/);
 });

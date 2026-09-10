@@ -11,7 +11,10 @@ import hashlib
 import fcntl
 from contextlib import contextmanager
 from datetime import datetime
-from flask import Flask, jsonify, request, session
+from urllib.parse import urlencode
+from urllib.request import Request as UrlRequest, urlopen
+from urllib.error import URLError
+from flask import Flask, Response, jsonify, request, session
 from flask_cors import CORS
 from pathlib import Path
 from user_manager import create_user, authenticate_user, get_user_by_id, get_all_users
@@ -45,6 +48,11 @@ SITE_ACCESS_USER_NAME = os.getenv('SITE_ACCESS_USER_NAME', '协作访客')
 
 # AI API Key（从环境变量读取）
 AI_API_KEY = os.getenv('AI_API_KEY', '')
+AMAP_SECURITY_JS_CODE = os.getenv('AMAP_SECURITY_JS_CODE', '')
+
+# 备用地理编码结果仅缓存短时间，避免在高德检索不可用时对公开服务重复发起相同请求。
+GEOCODING_CACHE = {}
+GEOCODING_CACHE_TTL_SECONDS = 60 * 60
 
 
 # ============== 认证 API ==============
@@ -233,6 +241,80 @@ def require_user_auth(f):
         return f(*args, **kwargs)
     
     return decorated
+
+
+@app.route('/_AMapService/<path:service_path>', methods=['GET'])
+def proxy_amap_service(service_path):
+    """代理地图 JS API 的服务请求，在服务端补充高德安全密钥。"""
+    if not AMAP_SECURITY_JS_CODE:
+        return jsonify({'error': '地图安全密钥尚未配置'}), 503
+
+    # JS API 的 serviceHost 默认面向 restapi；自定义地图样式例外地使用 webapi。
+    upstream_origin = 'https://webapi.amap.com' if service_path.startswith('v4/map/styles') else 'https://restapi.amap.com'
+    params = request.args.to_dict(flat=True)
+    params['jscode'] = AMAP_SECURITY_JS_CODE
+    upstream_url = f'{upstream_origin}/{service_path}?{urlencode(params)}'
+    try:
+        upstream_request = UrlRequest(upstream_url, headers={
+            'User-Agent': 'travel-together-local/1.0',
+            'Accept': request.headers.get('Accept', '*/*'),
+        })
+        with urlopen(upstream_request, timeout=10) as upstream_response:
+            body = upstream_response.read()
+            content_type = upstream_response.headers.get('Content-Type', 'application/json; charset=utf-8')
+            return Response(body, status=upstream_response.status, content_type=content_type)
+    except (URLError, TimeoutError):
+        return jsonify({'error': '地图服务暂时不可用'}), 502
+
+
+@app.route('/api/geocoding/search', methods=['GET'])
+@require_user_auth
+def search_geocoding():
+    """高德地点检索不可用时的受限备用地点搜索。"""
+    query = ' '.join(str(request.args.get('q', '')).split())
+    if not query:
+        return jsonify({'results': []})
+    if len(query) > 100:
+        return jsonify({'error': '搜索内容过长'}), 400
+
+    now = datetime.now().timestamp()
+    cached = GEOCODING_CACHE.get(query)
+    if cached and now - cached['updated_at'] < GEOCODING_CACHE_TTL_SECONDS:
+        return jsonify({'results': cached['results'], 'provider': 'openstreetmap'})
+
+    params = urlencode({
+        'format': 'jsonv2',
+        'limit': 8,
+        'accept-language': 'zh-CN',
+        'q': query,
+    })
+    geocoding_url = f'https://nominatim.openstreetmap.org/search?{params}'
+    try:
+        upstream_request = UrlRequest(geocoding_url, headers={
+            'User-Agent': 'travel-together-local/1.0',
+            'Accept': 'application/json',
+        })
+        with urlopen(upstream_request, timeout=8) as upstream_response:
+            payload = json.loads(upstream_response.read().decode('utf-8'))
+    except (URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        return jsonify({'error': '备用地点服务暂时不可用'}), 502
+
+    results = []
+    for place in payload if isinstance(payload, list) else []:
+        try:
+            lat = float(place['lat'])
+            lng = float(place['lon'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        results.append({
+            'name': place.get('name') or place.get('display_name', query),
+            'address': place.get('display_name', ''),
+            'lat': lat,
+            'lng': lng,
+        })
+
+    GEOCODING_CACHE[query] = {'updated_at': now, 'results': results}
+    return jsonify({'results': results, 'provider': 'openstreetmap'})
 
 
 # ============== 项目管理 API ==============

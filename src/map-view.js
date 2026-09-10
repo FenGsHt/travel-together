@@ -4,7 +4,28 @@
 let map = null;
 let markers = [];
 let infoWindows = [];
+let routeLines = [];
 let AMap = null;
+const drivingRouteCache = new Map();
+
+function getMapSdk() {
+  if (!AMap && typeof window !== 'undefined') AMap = window.AMap;
+  return AMap;
+}
+
+function hasCoordinates(item) {
+  return item?.lat != null && item?.lng != null;
+}
+
+function drivingCacheKey(source, target) {
+  return [source.lng, source.lat, target.lng, target.lat]
+    .map(value => Number(value).toFixed(6))
+    .join(',');
+}
+
+function routePath(route) {
+  return (route.steps || []).flatMap(step => step.path || []);
+}
 
 /**
  * 初始化高德地图
@@ -14,7 +35,7 @@ let AMap = null;
  */
 export function initMap(containerId, options = {}) {
   // eslint-disable-next-line no-undef
-  AMap = window.AMap;
+  AMap = getMapSdk();
   if (!AMap) {
     console.error('高德地图 SDK 未加载');
     return null;
@@ -36,6 +57,58 @@ export function initMap(containerId, options = {}) {
   });
 
   return map;
+}
+
+/**
+ * 查询两处地点之间的驾车路线。结果会按坐标缓存，供白板和地图复用。
+ * @returns {Promise<{distance: number, duration: number, path: Array}|null>}
+ */
+export function getDrivingRoute(source, target) {
+  if (!hasCoordinates(source) || !hasCoordinates(target)) return Promise.resolve(null);
+  const key = drivingCacheKey(source, target);
+  if (drivingRouteCache.has(key)) return drivingRouteCache.get(key);
+
+  const request = new Promise((resolve) => {
+    const sdk = getMapSdk();
+    const search = () => {
+      if (!AMap?.Driving) {
+        drivingRouteCache.delete(key);
+        resolve(null);
+        return;
+      }
+      const driving = new AMap.Driving({
+        policy: AMap.DrivingPolicy?.LEAST_TIME,
+      });
+      driving.search(
+        new AMap.LngLat(source.lng, source.lat),
+        new AMap.LngLat(target.lng, target.lat),
+        (status, result) => {
+          const route = status === 'complete' ? result?.routes?.[0] : null;
+          if (!route || !Number.isFinite(Number(route.distance)) || !Number.isFinite(Number(route.time))) {
+            drivingRouteCache.delete(key);
+            resolve(null);
+            return;
+          }
+          resolve({
+            distance: Number(route.distance),
+            duration: Number(route.time),
+            path: routePath(route),
+          });
+        },
+      );
+    };
+
+    if (sdk?.Driving) {
+      search();
+    } else if (sdk?.plugin) {
+      sdk.plugin('AMap.Driving', search);
+    } else {
+      drivingRouteCache.delete(key);
+      resolve(null);
+    }
+  });
+  drivingRouteCache.set(key, request);
+  return request;
 }
 
 /**
@@ -96,6 +169,44 @@ export function addMarkers(items, onClick) {
 }
 
 /**
+ * 在地图上绘制行程块之间的连接线。
+ * 仅渲染起点和终点都拥有坐标的连接，避免把未定位的行程误画到地图中心。
+ * @param {Array} connections 白板中的下一站连接
+ * @param {Array} items 已定位的行程项
+ */
+export function addRouteLines(connections = [], items = []) {
+  if (!map || !AMap) return;
+
+  clearRouteLines();
+  const itemById = new Map(items.map(item => [item.id, item]));
+  connections.forEach((connection) => {
+    const source = itemById.get(connection.fromTimelineId);
+    const target = itemById.get(connection.toTimelineId);
+    if (!source || !target) return;
+
+    const line = new AMap.Polyline({
+      path: [
+        new AMap.LngLat(source.lng, source.lat),
+        new AMap.LngLat(target.lng, target.lat),
+      ],
+      strokeColor: '#255f4d',
+      strokeOpacity: 0.78,
+      strokeWeight: 4,
+      strokeStyle: 'solid',
+      lineJoin: 'round',
+      showDir: true,
+      zIndex: 20,
+      extData: { connectionId: connection.id },
+    });
+    line.setMap(map);
+    routeLines.push(line);
+    getDrivingRoute(source, target).then((route) => {
+      if (route?.path?.length && routeLines.includes(line)) line.setPath(route.path);
+    });
+  });
+}
+
+/**
  * 清除所有标记
  */
 export function clearMarkers() {
@@ -103,6 +214,12 @@ export function clearMarkers() {
   markers = [];
   infoWindows.forEach(w => w.close());
   infoWindows = [];
+}
+
+/** 清除地图上的路线连线。 */
+export function clearRouteLines() {
+  routeLines.forEach(line => line.setMap(null));
+  routeLines = [];
 }
 
 /**
@@ -138,6 +255,7 @@ export function fitBounds(items) {
  */
 export function destroyMap() {
   clearMarkers();
+  clearRouteLines();
   if (map) {
     map.destroy();
     map = null;

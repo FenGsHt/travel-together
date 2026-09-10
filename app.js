@@ -4,8 +4,8 @@ import * as api from './src/api-client.js';
 import { createProjectAutosave } from './src/project-autosave.js';
 import { findTimeConflicts } from './src/timeline-conflicts.js';
 import { realtimeClient } from './src/realtime-client.js';
-import { initMap, addMarkers, destroyMap } from './src/map-view.js';
-import { openLocationPicker } from './src/location-picker.js';
+import { initMap, addMarkers, addRouteLines, getDrivingRoute, destroyMap } from './src/map-view.js';
+import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
@@ -18,6 +18,13 @@ let mapViewInitialized = false;
 const CANVAS_ZOOM_MIN = 0.5;
 const CANVAS_ZOOM_MAX = 1.6;
 const CANVAS_ZOOM_STEP = 0.1;
+const CARD_ROUTE_PORTS = ['top', 'right', 'bottom', 'left'];
+const CARD_ROUTE_PORT_LABELS = {
+  top: '上边',
+  right: '右边',
+  bottom: '下边',
+  left: '左边',
+};
 let canvasZoom = Number(localStorage.getItem(`travel-canvas-zoom-${currentProjectId || 'default'}`)) || 0.75;
 
 const projectAutosave = createProjectAutosave({
@@ -87,6 +94,7 @@ backBtn.addEventListener('click', () => {
 topbar.insertBefore(backBtn, topbar.firstChild.nextSibling);
 
 let days = [];
+let selectedDayId = 1;
 
 function generateDays(startDate, endDate) {
   const result = [];
@@ -434,6 +442,42 @@ function timelineItemsFor(day) {
     .sort((a, b) => a.time.localeCompare(b.time));
 }
 
+function dayNavigationSummary(items) {
+  const names = [...new Set(items.map(item => item.name).filter(Boolean))];
+  if (!names.length) return '暂未安排';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names.join(' · ');
+  return `${names[0]} 等 ${names.length} 处`;
+}
+
+function renderDayNavigation() {
+  const list = document.getElementById('day-nav-list');
+  if (!list) return;
+  if (!days.some(day => day.id === selectedDayId)) selectedDayId = days[0]?.id || 1;
+
+  list.replaceChildren(...days.map(day => {
+    const items = timelineItemsFor(day.id);
+    const summary = dayNavigationSummary(items);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'day-nav-item';
+    button.classList.toggle('selected', day.id === selectedDayId);
+    button.classList.toggle('is-empty', items.length === 0);
+    button.dataset.dayLink = String(day.id);
+    button.title = `${day.title} · ${summary} · ${items.length} 项`;
+    button.setAttribute('aria-label', `${day.title}，${summary}，${items.length} 项`);
+    button.innerHTML = `<span>${String(day.id).padStart(2, '0')}</span><em>${escapeHtml(summary)}</em><i>${items.length} 项</i>`;
+    button.addEventListener('click', () => {
+      selectedDayId = day.id;
+      list.querySelectorAll('.day-nav-item').forEach(item => {
+        item.classList.toggle('selected', item === button);
+      });
+      document.querySelector(`#day-${day.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return button;
+  }));
+}
+
 function routeDepthsForDay(dayItems, connections) {
   const dayItemIds = new Set(dayItems.map(item => item.id));
   const parentsById = new Map(dayItems.map(item => [item.id, []]));
@@ -676,33 +720,13 @@ function createTimelineCard(item) {
 
   const snapshot = store.snapshot();
   const poll = snapshot.polls.find(p => p.timelineItemId === item.id);
-  const timelineById = new Map(snapshot.timeline.map(timelineItem => [timelineItem.id, timelineItem]));
-  const outgoingRoutes = snapshot.connections
+  const outgoingConnectionCount = snapshot.connections
     .filter(connection => connection.fromTimelineId === item.id)
-    .map(connection => ({ connection, target: timelineById.get(connection.toTimelineId) }))
-    .filter(route => route.target);
-  const incomingRoutes = snapshot.connections
-    .filter(connection => connection.toTimelineId === item.id)
-    .map(connection => ({ connection, source: timelineById.get(connection.fromTimelineId) }))
-    .filter(route => route.source);
-  card.classList.toggle('route-source', outgoingRoutes.length > 0);
-  const routeSummaryHtml = outgoingRoutes.length || incomingRoutes.length
-    ? `<div class="route-summary">
-        ${incomingRoutes.map(route => `<span>← 从 ${escapeHtml(route.source.name)} 来</span>`).join('')}
-        ${outgoingRoutes.map(route => `
-          <span class="route-outgoing">
-            <button class="route-vote-btn" type="button" data-connection-id="${escapeHtml(route.connection.id)}"
-              aria-pressed="${Object.hasOwn(route.connection.votes || {}, editor.id)}" title="为这条下一站路线投票">
-              接着去 ${escapeHtml(route.target.name)} →
-            </button>
-            <button class="remove-route-btn" type="button" data-connection-id="${escapeHtml(route.connection.id)}"
-              aria-label="移除前往 ${escapeHtml(route.target.name)} 的连线" title="移除这条下一站连线">×</button>
-          </span>
-        `).join('')}
-      </div>`
+    .length;
+  const pollHtml = poll ? `<div class="poll-section">${renderPollCard(poll)}</div>` : '';
+  const routeVoteHintHtml = outgoingConnectionCount >= 2
+    ? `<p class="route-vote-hint">有 ${outgoingConnectionCount} 条下一站路线，点击对应连线投票</p>`
     : '';
-
-  const pollHtml = poll ? renderPollCard(poll) : `<button class="poll-btn" data-timeline-id="${item.id}">发起投票</button>`;
   const timeConflicts = findTimeConflicts(snapshot.timeline, item);
   const timeConflictHtml = timeConflicts.length
     ? `<p class="time-conflict" role="alert">时间冲突：${timeConflicts.map((conflict) => conflict.name).join('、')} 也安排在 ${item.time}</p>`
@@ -722,11 +746,23 @@ function createTimelineCard(item) {
   const safeTime = escapeHtml(item.time || '');
   const ariaLabel = `${safeName} 的时间`;
   const noteAriaLabel = `${safeName} 的备注`;
+  const timelineDeleteHtml = item.branchGroup ? '' : `
+    <button class="timeline-delete-btn" type="button" aria-label="删除行程中的 ${safeName}" title="删除这个行程卡片"></button>
+  `;
+  const routeConnectorHtml = item.branchGroup ? '' : CARD_ROUTE_PORTS.map((port) => `
+    <span class="route-connector route-connector-${port}" data-route-port="${port}" role="button" aria-label="从 ${safeName} ${CARD_ROUTE_PORT_LABELS[port]}创建下一站连线" title="拖到另一张卡片的任意边，表示玩完这里接着去那里"></span>
+  `).join('');
+  const scheduleControlHtml = item.branchGroup
+    ? `<input aria-label="${ariaLabel}" type="time" value="${safeTime}">`
+    : `<span class="schedule-control">
+        <button class="move-day-btn" type="button" aria-label="调整 ${safeName} 的天数" title="修改行程天数">第 ${item.day} 天</button>
+        <input aria-label="${ariaLabel}" type="time" value="${safeTime}">
+      </span>`;
 
   card.innerHTML = `
     <img src="${safeImage}" alt="${safeName}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2256%22 height=%2248%22><rect fill=%22%23eee%22 width=%22100%25%22 height=%22100%25%22/></svg>'">
     <div class="card-header">
-      <input aria-label="${ariaLabel}" type="time" value="${safeTime}">
+      ${scheduleControlHtml}
       <div class="name">${catIcon} ${safeName}</div>
       ${priceBadge}
     </div>
@@ -735,16 +771,17 @@ function createTimelineCard(item) {
       ${locationInfo}
       <button class="pick-location-btn" type="button">📍 选择位置</button>
       <button class="branch-btn" type="button" title="添加需要投票选择的备选项">备选分叉</button>
-      ${routeSummaryHtml}
       ${timeConflictHtml}
-      <div class="poll-section">${pollHtml}</div>
+      ${routeVoteHintHtml}
+      ${pollHtml}
       <div class="comments-section" data-timeline-id="${escapeHtml(item.id)}">
         <div class="comments-list"></div>
         <button class="add-comment-btn" data-timeline-id="${escapeHtml(item.id)}">💬 添加评论</button>
       </div>
     </div>
+    ${timelineDeleteHtml}
     <span class="drag-handle" aria-label="可拖动"></span>
-    <span class="route-connector" role="button" aria-label="从 ${safeName} 创建下一站连线" title="拖到下一站，表示玩完这里接着去那里"></span>
+    ${routeConnectorHtml}
   `;
 
   const [timeInput, noteInput] = card.querySelectorAll('input');
@@ -769,13 +806,14 @@ function createTimelineCard(item) {
     openTimelineItemDetail(item.id);
   });
 
-  card.querySelectorAll('.route-vote-btn').forEach((button) => {
-    button.addEventListener('click', () => voteForConnection(button.dataset.connectionId));
+  card.querySelector('.timeline-delete-btn')?.addEventListener('click', () => {
+    const confirmed = confirm(`删除「${item.name}」这个行程卡片？\n灵感库会保留该地点，关联的路线、投票和评论会一并清理。`);
+    if (!confirmed) return;
+    store.removeTimelineItem({ timelineId: item.id, editor });
+    render();
   });
 
-  card.querySelectorAll('.remove-route-btn').forEach((button) => {
-    button.addEventListener('click', () => removeTimelineConnection(button.dataset.connectionId));
-  });
+  card.querySelector('.move-day-btn')?.addEventListener('click', () => openMoveDayDialog(item));
 
   // 地图选点
   card.querySelector('.pick-location-btn').addEventListener('click', async () => {
@@ -924,35 +962,6 @@ function createTimelineCard(item) {
 
   bindCanvasCardDrag(card, item);
   
-  const pollBtn = card.querySelector('.poll-btn');
-  if (pollBtn) {
-    pollBtn.addEventListener('click', () => {
-      const dialog = document.getElementById('poll-dialog');
-      const form = document.getElementById('poll-form');
-      document.getElementById('poll-question').value = '';
-      document.getElementById('poll-options').value = '';
-      document.getElementById('poll-deadline').value = '';
-
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        const question = document.getElementById('poll-question').value.trim();
-        const rawOptions = document.getElementById('poll-options').value.trim();
-        const deadlineVal = document.getElementById('poll-deadline').value;
-        if (!question || !rawOptions) return;
-        const options = rawOptions.split('\n').map(s => s.trim()).filter(Boolean);
-        if (options.length < 2) { alert('至少需要两个选项'); return; }
-        const deadlineAt = deadlineVal ? new Date(deadlineVal).toISOString() : null;
-        try {
-          store.createPoll({ question, timelineItemId: item.id, creator: editor, options, deadlineAt });
-        } catch (error) { alert(error.message); return; }
-        dialog.close();
-        render();
-      };
-
-      dialog.showModal();
-    });
-  }
-  
   bindPollVoteHandlers(card);
   
   return card;
@@ -1087,6 +1096,21 @@ function openTravelDetail(item, { scheduled = false, city = '' } = {}) {
 function openTimelineItemDetail(timelineId) {
   const item = store.snapshot().timeline.find(candidate => candidate.id === timelineId);
   if (item) openTravelDetail(item, { scheduled: true });
+}
+
+function openMoveDayDialog(item) {
+  const dialog = document.getElementById('move-day-dialog');
+  const select = document.getElementById('move-day-select');
+  document.getElementById('move-day-title').textContent = `将「${item.name}」移到哪一天？`;
+  dialog.dataset.timelineId = item.id;
+  select.replaceChildren(...days.map(day => {
+    const option = document.createElement('option');
+    option.value = String(day.id);
+    option.textContent = `第 ${day.id} 天 · ${day.title}`;
+    option.selected = Number(item.day) === day.id;
+    return option;
+  }));
+  dialog.showModal();
 }
 
 function createBranchCard(items) {
@@ -1227,16 +1251,45 @@ function renderTimeline() {
     fragment.querySelector('.add-slot').addEventListener('click', () => {
       const dialog = document.getElementById('add-slot-dialog');
       const form = document.getElementById('add-slot-form');
-      document.getElementById('slot-name').value = '';
-      document.getElementById('slot-time').value = '10:00';
+      const blockSelect = document.getElementById('slot-block-id');
+      const nameInput = document.getElementById('slot-name');
+      const timeInput = document.getElementById('slot-time');
+      const blocks = store.snapshot().blocks;
+
+      blockSelect.replaceChildren();
+      const newBlockOption = document.createElement('option');
+      newBlockOption.value = '';
+      newBlockOption.textContent = '新建旅游块';
+      blockSelect.append(newBlockOption);
+      blocks.forEach(block => {
+        const option = document.createElement('option');
+        option.value = block.id;
+        option.textContent = block.name;
+        blockSelect.append(option);
+      });
+
+      const syncSelectedBlock = () => {
+        const selectedBlock = blocks.find(block => block.id === blockSelect.value);
+        nameInput.value = selectedBlock?.name || '';
+        nameInput.readOnly = Boolean(selectedBlock);
+        nameInput.placeholder = selectedBlock ? '将使用所选旅游块' : '行程名称';
+      };
+
+      blockSelect.value = '';
+      syncSelectedBlock();
+      timeInput.value = '10:00';
+      blockSelect.onchange = syncSelectedBlock;
 
       form.onsubmit = (e) => {
         e.preventDefault();
-        const name = document.getElementById('slot-name').value.trim();
-        const time = document.getElementById('slot-time').value;
-        if (!name || !time) return;
-        const block = store.createTravelBlock({ name, image: 'diannan-images/spots/建水古城.jpg' });
-        store.scheduleBlock({ blockId: block.id, day: day.id, time, editor });
+        const selectedBlock = blocks.find(block => block.id === blockSelect.value);
+        const name = nameInput.value.trim();
+        const time = timeInput.value;
+        if (!time || (!selectedBlock && !name)) return;
+        const blockId = selectedBlock
+          ? selectedBlock.id
+          : store.createTravelBlock({ name, image: 'diannan-images/spots/建水古城.jpg' }).id;
+        store.scheduleBlock({ blockId, day: day.id, time, editor });
         dialog.close();
         render();
       };
@@ -1340,6 +1393,7 @@ function renderActivity() {
 }
 
 function render({ persist = autosaveEnabled } = {}) {
+  renderDayNavigation();
   renderTimeline();
   renderActivity();
   if (currentView === 'map') renderMapView();
@@ -1377,14 +1431,19 @@ function renderMapView() {
   const mapContainer = document.getElementById('map-container');
   if (!mapContainer) return;
 
-  // 收集所有有坐标的行程项
-  const items = store.snapshot().timeline.filter(i => i.lat != null && i.lng != null);
+  const snapshot = store.snapshot();
+  // 仅将已选择位置的行程项放入地图；排序后标记序号也与行程顺序一致。
+  const items = snapshot.timeline
+    .filter(item => item.lat != null && item.lng != null)
+    .sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
 
   if (!mapViewInitialized) {
     initMap('map-canvas');
     mapViewInitialized = true;
   }
 
+  // 只有连线的两端都有坐标时才会在地图上画出路线。
+  addRouteLines(snapshot.connections, items);
   addMarkers(items, (item) => {
     // 点击标记后切换回时间线并滚动到该卡片
     switchView('timeline');
@@ -1400,6 +1459,70 @@ function renderMapView() {
 }
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const connectionDrivingInfo = new Map();
+
+function hasLocation(item) {
+  return item?.lat != null && item?.lng != null;
+}
+
+function connectionDrivingKey(connection, source, target) {
+  return [connection.id, source.lng, source.lat, target.lng, target.lat]
+    .map(value => String(value))
+    .join('|');
+}
+
+function drivingInfoForConnection(connection, source, target) {
+  if (!hasLocation(source) || !hasLocation(target)) return null;
+  const key = connectionDrivingKey(connection, source, target);
+  const cached = connectionDrivingInfo.get(connection.id);
+  if (cached?.key === key) return cached;
+
+  const pending = { key, status: 'pending' };
+  connectionDrivingInfo.set(connection.id, pending);
+  getDrivingRoute(source, target).then((route) => {
+    if (connectionDrivingInfo.get(connection.id) !== pending) return;
+    connectionDrivingInfo.set(connection.id, route
+      ? { key, status: 'ready', ...route }
+      : { key, status: 'unavailable' });
+    requestAnimationFrame(renderRouteLines);
+  });
+  return pending;
+}
+
+function formatDrivingMetric(info) {
+  // 两端尚未选择地点时不显示驾车信息，但连线本身仍应正常绘制并可删除。
+  if (!info) return null;
+  if (info.status === 'pending') return '🚗 正在计算驾车路线…';
+  if (info.status !== 'ready') return null;
+  const distance = info.distance >= 1000
+    ? `${(info.distance / 1000).toFixed(info.distance >= 10000 ? 0 : 1)} km`
+    : `${Math.round(info.distance)} m`;
+  const minutes = Math.max(1, Math.round(info.duration / 60));
+  const duration = minutes >= 60
+    ? `${Math.floor(minutes / 60)} 小时 ${minutes % 60 ? `${minutes % 60} 分` : ''}`
+    : `${minutes} 分`;
+  return `🚗 ${distance} · ${duration}`;
+}
+
+function appendDrivingMetricBadge(svg, geometry, label) {
+  const width = Math.max(100, label.length * 7 + 16);
+  const x = Math.max(4, Math.min(geometry.labelX - width / 2, timeline.clientWidth - width - 4));
+  const y = geometry.labelY + 10;
+  const badge = document.createElementNS(SVG_NAMESPACE, 'g');
+  badge.classList.add('route-metric-badge');
+  const background = document.createElementNS(SVG_NAMESPACE, 'rect');
+  background.setAttribute('x', x);
+  background.setAttribute('y', y);
+  background.setAttribute('width', width);
+  background.setAttribute('height', '20');
+  background.setAttribute('rx', '10');
+  const text = document.createElementNS(SVG_NAMESPACE, 'text');
+  text.setAttribute('x', x + width / 2);
+  text.setAttribute('y', y + 14);
+  text.textContent = label;
+  badge.append(background, text);
+  svg.append(badge);
+}
 
 function resetRouteLayer(svg) {
   svg.replaceChildren();
@@ -1420,29 +1543,75 @@ function resetRouteLayer(svg) {
   svg.append(defs);
 }
 
-function routeGeometryBetween(sourceCard, targetCard, timelineRect, fanIndex = 0) {
-  const sourceRect = sourceCard.getBoundingClientRect();
-  const targetRect = targetCard.getBoundingClientRect();
-  const startX = (sourceRect.left + sourceRect.width / 2 - timelineRect.left) / canvasZoom;
-  const startY = (sourceRect.bottom - timelineRect.top) / canvasZoom;
-  const endX = (targetRect.left + targetRect.width / 2 - timelineRect.left) / canvasZoom;
-  const endY = (targetRect.top - timelineRect.top) / canvasZoom;
+function normalizeRoutePort(port, fallback) {
+  return CARD_ROUTE_PORTS.includes(port) ? port : fallback;
+}
 
-  if (endY >= startY) {
-    const middleY = startY + (endY - startY) / 2 + fanIndex * 8;
-    return {
-      d: `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`,
-      labelX: (startX + endX) / 2,
-      labelY: middleY,
-    };
-  }
-
-  const bendX = (Math.max(sourceRect.right, targetRect.right) - timelineRect.left) / canvasZoom + 34 + fanIndex * 12;
-  const bendY = (Math.max(sourceRect.bottom, targetRect.bottom) - timelineRect.top) / canvasZoom + 28 + fanIndex * 8;
+function routePortVector(port) {
   return {
-    d: `M ${startX} ${startY} C ${startX} ${bendY}, ${bendX} ${bendY}, ${bendX} ${bendY} L ${bendX} ${endY - 24} C ${bendX} ${endY - 8}, ${endX} ${endY - 8}, ${endX} ${endY}`,
-    labelX: bendX,
-    labelY: (bendY + endY) / 2,
+    top: { x: 0, y: -1 },
+    right: { x: 1, y: 0 },
+    bottom: { x: 0, y: 1 },
+    left: { x: -1, y: 0 },
+  }[normalizeRoutePort(port, 'bottom')];
+}
+
+function cardRoutePortPoint(card, port, timelineRect) {
+  const rect = card.getBoundingClientRect();
+  const points = {
+    top: { x: rect.left + rect.width / 2, y: rect.top },
+    right: { x: rect.right, y: rect.top + rect.height / 2 },
+    bottom: { x: rect.left + rect.width / 2, y: rect.bottom },
+    left: { x: rect.left, y: rect.top + rect.height / 2 },
+  };
+  const point = points[normalizeRoutePort(port, 'bottom')];
+  return {
+    x: (point.x - timelineRect.left) / canvasZoom,
+    y: (point.y - timelineRect.top) / canvasZoom,
+  };
+}
+
+function nearestRoutePortForPoint(card, clientX, clientY) {
+  const rect = card.getBoundingClientRect();
+  const distances = {
+    top: Math.abs(clientY - rect.top),
+    right: Math.abs(clientX - rect.right),
+    bottom: Math.abs(clientY - rect.bottom),
+    left: Math.abs(clientX - rect.left),
+  };
+  return CARD_ROUTE_PORTS.reduce((nearest, port) => (
+    distances[port] < distances[nearest] ? port : nearest
+  ), 'top');
+}
+
+function routeGeometryBetween(sourceCard, targetCard, timelineRect, fanIndex = 0, fromPort = 'bottom', toPort = 'top') {
+  const normalizedFromPort = normalizeRoutePort(fromPort, 'bottom');
+  const normalizedToPort = normalizeRoutePort(toPort, 'top');
+  const start = cardRoutePortPoint(sourceCard, normalizedFromPort, timelineRect);
+  const end = cardRoutePortPoint(targetCard, normalizedToPort, timelineRect);
+  const sourceVector = routePortVector(normalizedFromPort);
+  const targetVector = routePortVector(normalizedToPort);
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const distance = Math.hypot(deltaX, deltaY);
+  const handleLength = Math.min(120, Math.max(10, distance * 0.38));
+  const fanMagnitude = fanIndex * Math.min(12, Math.max(4, distance * 0.08));
+  const normal = distance ? { x: -deltaY / distance, y: deltaX / distance } : { x: 0, y: 0 };
+  const fanX = normal.x * fanMagnitude;
+  const fanY = normal.y * fanMagnitude;
+  const controlOne = {
+    x: start.x + sourceVector.x * handleLength + fanX,
+    y: start.y + sourceVector.y * handleLength + fanY,
+  };
+  const controlTwo = {
+    x: end.x + targetVector.x * handleLength + fanX,
+    y: end.y + targetVector.y * handleLength + fanY,
+  };
+
+  return {
+    d: `M ${start.x} ${start.y} C ${controlOne.x} ${controlOne.y}, ${controlTwo.x} ${controlTwo.y}, ${end.x} ${end.y}`,
+    labelX: (start.x + 3 * controlOne.x + 3 * controlTwo.x + end.x) / 8,
+    labelY: (start.y + 3 * controlOne.y + 3 * controlTwo.y + end.y) / 8,
   };
 }
 
@@ -1489,7 +1658,14 @@ function renderRouteLines() {
 
     const fanIndex = outgoingIndex.get(connection.fromTimelineId) || 0;
     outgoingIndex.set(connection.fromTimelineId, fanIndex + 1);
-    const geometry = routeGeometryBetween(sourceCard, targetCard, timelineRect, fanIndex);
+    const geometry = routeGeometryBetween(
+      sourceCard,
+      targetCard,
+      timelineRect,
+      fanIndex,
+      connection.fromPort || 'bottom',
+      connection.toPort || 'top',
+    );
 
     const hitPath = document.createElementNS(SVG_NAMESPACE, 'path');
     hitPath.classList.add('route-line-hit');
@@ -1508,57 +1684,71 @@ function renderRouteLines() {
     path.append(title);
     svg.append(path);
 
+    const drivingMetric = formatDrivingMetric(drivingInfoForConnection(
+      connection,
+      timelineById.get(connection.fromTimelineId),
+      timelineById.get(connection.toTimelineId),
+    ));
+    if (drivingMetric) appendDrivingMetricBadge(svg, geometry, drivingMetric);
+
     const voterNames = connectionVoterNames(connection);
-    let voterBadgeWidth = 0;
-    if (voterNames.length) {
-      const visibleNames = voterNames.slice(0, 3);
-      const label = `${visibleNames.join('、')}${voterNames.length > 3 ? ` +${voterNames.length - 3}` : ''}`;
-      const width = Math.max(42, label.length * 11 + 14);
-      voterBadgeWidth = width;
-      const preferredX = geometry.labelX - width / 2;
-      const x = Math.max(4, Math.min(preferredX, timeline.clientWidth - width - 4));
-      const y = geometry.labelY - 10;
-      const badge = document.createElementNS(SVG_NAMESPACE, 'g');
-      badge.classList.add('route-voter-badge');
-      badge.dataset.connectionId = connection.id;
-      badge.setAttribute('role', 'button');
-      badge.setAttribute('tabindex', '0');
-      badge.setAttribute('aria-label', `${label} 投给这条路线；点击修改投票`);
-      const background = document.createElementNS(SVG_NAMESPACE, 'rect');
-      background.setAttribute('x', x);
-      background.setAttribute('y', y);
-      background.setAttribute('width', width);
-      background.setAttribute('height', '20');
-      background.setAttribute('rx', '10');
-      const text = document.createElementNS(SVG_NAMESPACE, 'text');
-      text.setAttribute('x', x + 7);
-      text.setAttribute('y', y + 14);
-      text.textContent = label;
-      badge.append(background, text);
-      badge.addEventListener('click', () => voteForConnection(connection.id));
-      badge.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') voteForConnection(connection.id);
-      });
-      svg.append(badge);
-    }
+    const visibleNames = voterNames.slice(0, 3);
+    // 没有人投票时也保留显式入口；投票后同一位置直接展示投票人。
+    const label = voterNames.length
+      ? `${visibleNames.join('、')}${voterNames.length > 3 ? ` +${voterNames.length - 3}` : ''}`
+      : '投票';
+    const voterBadgeWidth = Math.max(42, label.length * 11 + 14);
+    const preferredX = geometry.labelX - voterBadgeWidth / 2;
+    const badgeX = Math.max(4, Math.min(preferredX, timeline.clientWidth - voterBadgeWidth - 4));
+    const badgeY = geometry.labelY - 10;
+    const badge = document.createElementNS(SVG_NAMESPACE, 'g');
+    badge.classList.add('route-voter-badge');
+    if (!voterNames.length) badge.classList.add('route-vote-cta');
+    badge.dataset.connectionId = connection.id;
+    badge.setAttribute('role', 'button');
+    badge.setAttribute('tabindex', '0');
+    badge.setAttribute('aria-label', voterNames.length
+      ? `${label} 投给这条路线；点击修改投票`
+      : '投给这条下一站路线');
+    const badgeTitle = document.createElementNS(SVG_NAMESPACE, 'title');
+    badgeTitle.textContent = voterNames.length ? '点击修改投票' : '点击投票给这条路线';
+    const background = document.createElementNS(SVG_NAMESPACE, 'rect');
+    background.setAttribute('x', badgeX);
+    background.setAttribute('y', badgeY);
+    background.setAttribute('width', voterBadgeWidth);
+    background.setAttribute('height', '20');
+    background.setAttribute('rx', '10');
+    const text = document.createElementNS(SVG_NAMESPACE, 'text');
+    text.setAttribute('x', badgeX + 7);
+    text.setAttribute('y', badgeY + 14);
+    text.textContent = label;
+    badge.append(badgeTitle, background, text);
+    badge.addEventListener('click', () => voteForConnection(connection.id));
+    badge.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') voteForConnection(connection.id);
+    });
+    svg.append(badge);
 
     const removeControl = document.createElementNS(SVG_NAMESPACE, 'g');
-    const removeX = Math.min(timeline.clientWidth - 12, geometry.labelX + voterBadgeWidth / 2 + 13);
+    // 删除按钮始终放在连线中部标记右侧，给触控板和缩放场景留出足够的点击面积。
+    const removeX = Math.max(14, Math.min(timeline.clientWidth - 14, geometry.labelX + voterBadgeWidth / 2 + 18));
     const removeY = geometry.labelY;
     removeControl.classList.add('route-remove-control');
     removeControl.dataset.connectionId = connection.id;
     removeControl.setAttribute('role', 'button');
     removeControl.setAttribute('tabindex', '0');
     removeControl.setAttribute('aria-label', `取消 ${title.textContent} 的连接`);
+    const removeTitle = document.createElementNS(SVG_NAMESPACE, 'title');
+    removeTitle.textContent = '删除这条连接';
     const removeCircle = document.createElementNS(SVG_NAMESPACE, 'circle');
     removeCircle.setAttribute('cx', removeX);
     removeCircle.setAttribute('cy', removeY);
-    removeCircle.setAttribute('r', '9');
+    removeCircle.setAttribute('r', '12');
     const removeText = document.createElementNS(SVG_NAMESPACE, 'text');
     removeText.setAttribute('x', removeX);
-    removeText.setAttribute('y', removeY + 3.5);
+    removeText.setAttribute('y', removeY + 5);
     removeText.textContent = '×';
-    removeControl.append(removeCircle, removeText);
+    removeControl.append(removeTitle, removeCircle, removeText);
     removeControl.addEventListener('click', () => removeTimelineConnection(connection.id));
     removeControl.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') removeTimelineConnection(connection.id);
@@ -1575,11 +1765,13 @@ function renderRouteLines() {
   let dragging = false;
   let sourceCard = null;
   let sourceId = null;
+  let sourcePort = null;
   let previewPath = null;
+  let hoveredTargetCard = null;
 
   document.addEventListener('mousedown', (e) => {
     const connector = e.target.closest('.route-connector');
-    if (!connector) return;
+    if (!connector || e.button !== 0) return;
     const card = connector.closest('.timeline-card');
     if (!card) return;
     const item = store.snapshot().timeline.find(t => t.id === card.dataset.timelineId);
@@ -1588,19 +1780,21 @@ function renderRouteLines() {
     dragging = true;
     sourceCard = card;
     sourceId = item.id;
+    sourcePort = normalizeRoutePort(connector.dataset.routePort, 'bottom');
+    hoveredTargetCard = null;
+    timeline.classList.add('is-connecting');
+    connector.classList.add('is-active');
 
-    const rect = card.getBoundingClientRect();
     const timelineRect = document.getElementById('timeline').getBoundingClientRect();
-    const startX = (rect.left + rect.width / 2 - timelineRect.left) / canvasZoom;
-    const startY = (rect.bottom - timelineRect.top) / canvasZoom;
+    const start = cardRoutePortPoint(card, sourcePort, timelineRect);
 
     renderRouteLines();
     svg.style.display = '';
     previewPath = document.createElementNS(SVG_NAMESPACE, 'path');
     previewPath.classList.add('route-line', 'route-line-preview');
-    previewPath.dataset.startX = startX;
-    previewPath.dataset.startY = startY;
-    previewPath.setAttribute('d', `M ${startX} ${startY} L ${startX} ${startY}`);
+    previewPath.dataset.startX = start.x;
+    previewPath.dataset.startY = start.y;
+    previewPath.setAttribute('d', `M ${start.x} ${start.y} L ${start.x} ${start.y}`);
     previewPath.setAttribute('marker-end', 'url(#route-arrowhead)');
     svg.append(previewPath);
     e.preventDefault();
@@ -1608,21 +1802,36 @@ function renderRouteLines() {
 
   document.addEventListener('mousemove', (e) => {
     if (!dragging || !previewPath) return;
+    // mouseup 有时会命中 SVG 覆盖层；记录最后一个真实悬停的卡片，保证能连续拉出多条线。
+    const moveTarget = e.target instanceof Element ? e.target : null;
+    const hoveredCard = moveTarget?.closest('.timeline-card');
+    hoveredTargetCard = hoveredCard && hoveredCard !== sourceCard ? hoveredCard : null;
     const timelineRect = document.getElementById('timeline').getBoundingClientRect();
     const x = (e.clientX - timelineRect.left) / canvasZoom;
     const y = (e.clientY - timelineRect.top) / canvasZoom;
     const startX = Number(previewPath.dataset.startX);
     const startY = Number(previewPath.dataset.startY);
-    const middleY = startY + (y - startY) / 2;
-    previewPath.setAttribute('d', `M ${startX} ${startY} C ${startX} ${middleY}, ${x} ${middleY}, ${x} ${y}`);
+    const vector = routePortVector(sourcePort);
+    const distance = Math.hypot(x - startX, y - startY);
+    const handleLength = Math.min(100, Math.max(10, distance * 0.38));
+    previewPath.setAttribute('d', `M ${startX} ${startY} C ${startX + vector.x * handleLength} ${startY + vector.y * handleLength}, ${x} ${y}, ${x} ${y}`);
   });
 
   document.addEventListener('mouseup', (e) => {
     if (!dragging) return;
     dragging = false;
     previewPath?.remove();
+    timeline.classList.remove('is-connecting');
+    sourceCard?.querySelector(`[data-route-port="${sourcePort}"]`)?.classList.remove('is-active');
 
-    const targetCard = document.elementFromPoint(e.clientX, e.clientY)?.closest('.timeline-card');
+    // 缩放画布下，elementFromPoint 的坐标换算偶尔会偏移；优先采用 mouseup 实际命中的元素。
+    const eventTarget = e.target instanceof Element ? e.target : null;
+    const pointTarget = document.elementFromPoint(e.clientX, e.clientY);
+    const targetConnector = eventTarget?.closest('.route-connector')
+      || pointTarget?.closest('.route-connector');
+    const targetCard = eventTarget?.closest('.timeline-card')
+      || pointTarget?.closest('.timeline-card')
+      || hoveredTargetCard;
     if (targetCard && targetCard !== sourceCard) {
       const targetItem = store.snapshot().timeline.find(t => t.id === targetCard.dataset.timelineId);
       if (targetItem && !targetItem.branchGroup) {
@@ -1630,6 +1839,11 @@ function renderRouteLines() {
           store.connectTimelineItems({
             fromTimelineId: sourceId,
             toTimelineId: targetItem.id,
+            fromPort: sourcePort,
+            // 命中圆点时使用指定边；落在目标卡片任意位置时自动选择最近边，方便继续添加多条出线。
+            toPort: targetConnector
+              ? normalizeRoutePort(targetConnector.dataset.routePort, 'top')
+              : nearestRoutePortForPoint(targetCard, e.clientX, e.clientY),
             editor,
           });
           render();
@@ -1648,7 +1862,9 @@ function renderRouteLines() {
     }
     sourceCard = null;
     sourceId = null;
+    sourcePort = null;
     previewPath = null;
+    hoveredTargetCard = null;
   });
 })();
 
@@ -1665,6 +1881,15 @@ travelDetailDialog?.addEventListener('click', event => {
   const clickedBackdrop = event.clientX < rect.left || event.clientX > rect.right
     || event.clientY < rect.top || event.clientY > rect.bottom;
   if (clickedBackdrop) travelDetailDialog.close();
+});
+document.getElementById('confirm-move-day')?.addEventListener('click', () => {
+  const dialog = document.getElementById('move-day-dialog');
+  const timelineId = dialog.dataset.timelineId;
+  const day = Number(document.getElementById('move-day-select').value);
+  if (!timelineId || !Number.isInteger(day)) return;
+  store.moveTimelineItem({ timelineId, day, editor });
+  dialog.close();
+  render();
 });
 document.querySelector('#reload-conflict').addEventListener('click', () => window.location.reload());
 document.querySelector('#overwrite-conflict').addEventListener('click', async () => {
@@ -1745,9 +1970,6 @@ document.getElementById('block-image').addEventListener('input', (e) => {
   } else if (!url) {
     document.getElementById('image-preview').innerHTML = '';
   }
-});
-document.querySelectorAll('[data-day-link]').forEach((button) => {
-  button.addEventListener('click', () => document.querySelector(`#day-${button.dataset.dayLink}`).scrollIntoView({ behavior: 'smooth', block: 'center' }));
 });
 window.addEventListener('keydown', (event) => {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return;

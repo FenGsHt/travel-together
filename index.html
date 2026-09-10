@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260910-compact-cards" />
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script type="module">
     import * as api from './src/api-client.js';
@@ -73,11 +73,7 @@
 
         <section class="day-nav" aria-label="行程天数">
           <p class="eyebrow">行程树</p>
-          <button class="day-nav-item selected" data-day-link="1"><span>01</span><em>建水</em><i>2 项</i></button>
-          <button class="day-nav-item" data-day-link="2"><span>02</span><em>建水 → 元阳</em><i>0 项</i></button>
-          <button class="day-nav-item" data-day-link="3"><span>03</span><em>元阳</em><i>1 项</i></button>
-          <button class="day-nav-item" data-day-link="4"><span>04</span><em>蒙自</em><i>0 项</i></button>
-          <button class="day-nav-item" data-day-link="5"><span>05</span><em>普者黑</em><i>0 项</i></button>
+          <div class="day-nav-list" id="day-nav-list"></div>
         </section>
 
         <section class="online-users-section" aria-label="在线用户">
@@ -103,7 +99,7 @@
             <button class="active" data-view="timeline">时间线</button><button data-view="map">地图</button>
           </div>
         </div>
-        <p class="helper">拖动白板空白处可移动画布；拖动旅行块可自由摆放，单击可查看详情；拖动卡片底部圆点连接下一站。画布支持缩放，点击箭头可为路线投票。</p>
+        <p class="helper">拖动白板空白处可移动画布；拖动旅行块可自由摆放，单击可查看详情；从卡片四边圆点拖到另一旅游块即可连接，终点会自动贴合最近边。画布支持缩放，点击箭头可为路线投票。</p>
         <div class="board-shell">
           <div class="canvas-controls" aria-label="画布缩放控制">
             <button id="canvas-zoom-out" type="button" aria-label="缩小画布">−</button>
@@ -278,6 +274,19 @@
     </div>
   </dialog>
 
+  <dialog id="move-day-dialog" class="move-day-dialog" aria-labelledby="move-day-title">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
+    <p class="eyebrow">调整行程日期</p>
+    <h2 id="move-day-title">将旅行块移到哪一天？</h2>
+    <label class="move-day-field" for="move-day-select">目标天数
+      <select id="move-day-select"></select>
+    </label>
+    <div class="move-day-actions">
+      <button class="button button-ghost" data-close-dialog type="button">取消</button>
+      <button class="button button-ink" id="confirm-move-day" type="button">移动到这一天</button>
+    </div>
+  </dialog>
+
   <dialog id="branch-dialog" class="branch-dialog">
     <button class="dialog-close" data-close-dialog type="button" aria-label="关闭">×</button>
     <p class="eyebrow">创建备选分叉</p>
@@ -312,6 +321,12 @@
     <h2>新建空白时间</h2>
     <form id="add-slot-form" class="add-block-form">
       <div class="form-group">
+        <label for="slot-block-id">已创建旅游块（可选）</label>
+        <select id="slot-block-id">
+          <option value="">新建旅游块</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label for="slot-name">名称</label>
         <input id="slot-name" type="text" placeholder="行程名称" required>
       </div>
@@ -330,8 +345,17 @@
     </article>
   </template>
 
-  <script src="https://webapi.amap.com/maps?v=2.0&key=8fbe29f9df06d4b82738fafcb5155bef&plugin=AMap.PlaceSearch"></script>
-  <script type="module" src="app.js"></script>
+  <script>
+    // 安全密钥由后端 /_AMapService 代理添加，前端不保存明文。
+    const amapServiceOrigin = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      ? 'http://localhost:5001'
+      : window.location.origin;
+    window._AMapSecurityConfig = {
+      serviceHost: `${amapServiceOrigin}/_AMapService`
+    };
+  </script>
+  <script src="https://webapi.amap.com/maps?v=2.0&key=5f6a87ea770765a1a5fe984ea045f8ea&plugin=AMap.PlaceSearch,AMap.Driving"></script>
+  <script type="module" src="app.js?v=20260909-geocoding-fallback"></script>
 </body>
 </html>
 <!-- 1788710385 -->

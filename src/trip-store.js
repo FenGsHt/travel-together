@@ -347,7 +347,7 @@ export function createTripStore() {
       return [structuredClone(source), structuredClone(alternative)];
     },
 
-    connectTimelineItems({ fromTimelineId, toTimelineId, editor }) {
+    connectTimelineItems({ fromTimelineId, toTimelineId, fromPort = 'bottom', toPort = 'top', editor }) {
       requireMember(editor);
       if (fromTimelineId === toTimelineId) {
         throw new Error('A timeline item cannot connect to itself');
@@ -373,6 +373,8 @@ export function createTripStore() {
         id: `connection-${++connectionSequence}`,
         fromTimelineId,
         toTimelineId,
+        fromPort: ['top', 'right', 'bottom', 'left'].includes(fromPort) ? fromPort : 'bottom',
+        toPort: ['top', 'right', 'bottom', 'left'].includes(toPort) ? toPort : 'top',
         votes: {},
       };
       state.connections.push(connection);
@@ -380,6 +382,8 @@ export function createTripStore() {
         connectionId: connection.id,
         fromTimelineId,
         toTimelineId,
+        fromPort: connection.fromPort,
+        toPort: connection.toPort,
       });
       return structuredClone(connection);
     },
@@ -466,6 +470,8 @@ export function createTripStore() {
       state.connections = state.connections.filter(connection => (
         connection.fromTimelineId !== timelineId && connection.toTimelineId !== timelineId
       ));
+      state.polls = state.polls.filter(poll => poll.timelineItemId !== timelineId);
+      state.comments = state.comments.filter(comment => comment.timelineItemId !== timelineId);
       record('timeline.deleted', editor, { timelineId });
       return true;
     },

@@ -1,6 +1,8 @@
 // 地图选点弹窗模块
 // 在 dialog 中嵌入高德地图，支持地点搜索和点击选点
 
+import { API_BASE } from './api-client.js';
+
 let pickerMap = null;
 let pickerMarker = null;
 let searchMarkers = [];
@@ -152,55 +154,91 @@ function initPickerMap(existingLat, existingLng) {
 }
 
 function searchPlace(keyword) {
-  if (!placeSearch) return;
-
   clearSearchResults();
   clearSearchMarkers();
 
   const resultsContainer = document.getElementById(RESULTS_ID);
   const seq = ++searchSequence;
 
+  if (!placeSearch) {
+    searchPlaceFallback(keyword, seq);
+    return;
+  }
+
   placeSearch.search(keyword, (status, result) => {
     // 忽略过期请求的结果
     if (seq !== searchSequence) return;
 
-    if (status !== 'complete' || !result.poiList) {
-      resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
+    if (status !== 'complete' || !result.poiList || result.poiList.pois.length === 0) {
+      searchPlaceFallback(keyword, seq);
       return;
     }
 
     const pois = result.poiList.pois;
-    if (pois.length === 0) {
-      resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
-      return;
-    }
+    renderSearchResults(pois.map(poi => ({
+      name: poi.name,
+      address: poi.address || '',
+      lat: parseFloat(poi.location.lat),
+      lng: parseFloat(poi.location.lng),
+    })));
+  });
+}
 
-    resultsContainer.innerHTML = pois.map((poi, index) => `
+async function searchPlaceFallback(keyword, seq) {
+  const resultsContainer = document.getElementById(RESULTS_ID);
+  if (resultsContainer) {
+    resultsContainer.innerHTML = '<p class="no-results">高德检索暂不可用，正在切换备用地点服务…</p>';
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/geocoding/search?q=${encodeURIComponent(keyword)}`, {
+      credentials: 'include',
+    });
+    const payload = await response.json();
+    if (seq !== searchSequence) return;
+    if (!response.ok) throw new Error(payload.error || '备用地点服务暂时不可用');
+    renderSearchResults(payload.results || []);
+  } catch (error) {
+    if (seq !== searchSequence) return;
+    if (resultsContainer) {
+      resultsContainer.innerHTML = '<p class="no-results">地点搜索暂时不可用，请点击地图选择位置</p>';
+    }
+  }
+}
+
+function renderSearchResults(pois) {
+  const resultsContainer = document.getElementById(RESULTS_ID);
+  if (!resultsContainer) return;
+  const validPois = pois.filter(poi => Number.isFinite(poi.lat) && Number.isFinite(poi.lng));
+  if (validPois.length === 0) {
+    resultsContainer.innerHTML = '<p class="no-results">未找到相关地点</p>';
+    return;
+  }
+
+  resultsContainer.innerHTML = validPois.map((poi, index) => `
       <div class="search-result-item" data-index="${index}">
         <span class="result-name">${escapeHtml(poi.name)}</span>
         <span class="result-address">${escapeHtml(poi.address || '')}</span>
       </div>
     `).join('');
 
-    // 绑定点击事件
-    resultsContainer.querySelectorAll('.search-result-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const idx = parseInt(item.dataset.index);
-        const poi = pois[idx];
-        const lng = parseFloat(poi.location.lng);
-        const lat = parseFloat(poi.location.lat);
+  // 绑定点击事件
+  resultsContainer.querySelectorAll('.search-result-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const idx = parseInt(item.dataset.index);
+      const poi = validPois[idx];
+      const lng = Number(poi.lng);
+      const lat = Number(poi.lat);
 
-        placeMarker(lat, lng);
-        updateInfo(lat, lng, poi.name);
-        document.getElementById(CONFIRM_ID).disabled = false;
+      placeMarker(lat, lng);
+      updateInfo(lat, lng, poi.name);
+      document.getElementById(CONFIRM_ID).disabled = false;
 
-        // 高亮选中
-        resultsContainer.querySelectorAll('.search-result-item').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
+      // 高亮选中
+      resultsContainer.querySelectorAll('.search-result-item').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
 
-        // 在地图上添加搜索标记
-        addSearchMarker(lat, lng, poi.name);
-      });
+      // 在地图上添加搜索标记
+      addSearchMarker(lat, lng, poi.name);
     });
   });
 }

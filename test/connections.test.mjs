@@ -17,6 +17,27 @@ function createRouteStore() {
 }
 
 describe('下一站连线', () => {
+  it('记录连线所使用的四边连接点，并为旧调用保留底到顶默认值', () => {
+    const { store, items: [a, b, c] } = createRouteStore();
+    const sideRoute = store.connectTimelineItems({
+      fromTimelineId: a.id,
+      toTimelineId: b.id,
+      fromPort: 'right',
+      toPort: 'left',
+      editor,
+    });
+    const defaultRoute = store.connectTimelineItems({
+      fromTimelineId: b.id,
+      toTimelineId: c.id,
+      editor,
+    });
+
+    assert.deepEqual(
+      [sideRoute.fromPort, sideRoute.toPort, defaultRoute.fromPort, defaultRoute.toPort],
+      ['right', 'left', 'bottom', 'top'],
+    );
+  });
+
   it('A 可以同时连接到 B 和 C，且不改变行程项', () => {
     const { store, items: [a, b, c] } = createRouteStore();
 
@@ -57,6 +78,23 @@ describe('下一站连线', () => {
     store.removeTimelineItem({ timelineId: b.id, editor });
 
     assert.deepEqual(store.snapshot().connections.map(connection => connection.toTimelineId), [c.id]);
+  });
+
+  it('删除行程项时同步清理关联投票和评论', () => {
+    const { store, items: [a] } = createRouteStore();
+    store.createPoll({
+      question: '还去吗？',
+      timelineItemId: a.id,
+      creator: editor,
+      options: ['去', '不去'],
+    });
+    store.addComment({ timelineItemId: a.id, content: '早点出发', author: editor });
+
+    store.removeTimelineItem({ timelineId: a.id, editor });
+
+    const snapshot = store.snapshot();
+    assert.equal(snapshot.polls.length, 0);
+    assert.equal(snapshot.comments.length, 0);
   });
 
   it('可以单独移除一条出线而保留同一起点的其他出线', () => {
