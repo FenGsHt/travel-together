@@ -54,7 +54,9 @@ test('map view renders positioned itinerary items and their valid route connecti
   const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
   const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
 
-  assert.match(app, /import \{ initMap, addMarkers, addRouteLines, getDrivingRoute, destroyMap \}/);
+  assert.match(app, /import \{ initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap \} from '\.\/src\/map-view\.js\?v=20260911-hiking-routes'/);
+  assert.match(app, /function mapSignature/);
+  assert.match(app, /mapViewInitialized && !force && mapViewSignature === nextSignature/);
   assert.match(app, /addRouteLines\(snapshot\.connections, items\)/);
   assert.match(mapView, /export function addRouteLines\(connections = \[\], items = \[\]\)/);
   assert.match(mapView, /itemById\.get\(connection\.fromTimelineId\)/);
@@ -136,7 +138,9 @@ test('the board exposes zoom controls and free-position pointer dragging', async
   assert.match(app, /function setCanvasZoom/);
   assert.match(app, /function bindCanvasCardDrag/);
   assert.match(app, /function bindCanvasPan/);
-  assert.match(app, /viewport\.scrollLeft = panState\.scrollLeft/);
+  assert.match(app, /panState\.nextScrollLeft = panState\.scrollLeft/);
+  assert.match(app, /function scheduleRouteRender/);
+  assert.match(app, /if \(routeRenderFrame !== null\) return/);
   assert.match(app, /isInteractiveTarget\(event\.target\)/);
   assert.match(app, /canvasX: Number\(card\.dataset\.canvasX\)/);
   assert.match(app, /function openTravelDetail/);
@@ -152,4 +156,32 @@ test('the board exposes zoom controls and free-position pointer dragging', async
   assert.match(html, /id="slot-block-id"/);
   assert.match(app, /const selectedBlock = blocks\.find\(block => block\.id === blockSelect\.value\)/);
   assert.match(app, /store\.scheduleBlock\(\{ blockId, day: day\.id, time, editor \}\)/);
+});
+
+test('hiking projects use one route instead of a day-by-day itinerary', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
+  const projects = await readFile(new URL('../projects.html', import.meta.url), 'utf8');
+  const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
+
+  assert.match(projects, /value="hiking">徒步路线/);
+  assert.match(app, /function isHikingProject/);
+  assert.match(app, /function createHikingRoutePanel/);
+  assert.match(app, /if \(isHikingProject\(\)\) \{\n    timeline\.append\(createHikingRoutePanel\(\)\)/);
+  assert.match(app, /addHikingRoute\(hikingRoute\?\.start, hikingRoute\?\.end\)/);
+  assert.match(mapView, /export function getWalkingRoute/);
+  assert.match(mapView, /export function addHikingRoute/);
+  assert.match(styles, /\.hiking-route-panel/);
+});
+
+test('projects can filter journeys by completion and update their status', async () => {
+  const projects = await readFile(new URL('../projects.html', import.meta.url), 'utf8');
+  const backend = await readFile(new URL('../backend/app.py', import.meta.url), 'utf8');
+
+  assert.match(projects, /data-project-status="completed">已完成/);
+  assert.match(projects, /projectStatusFilter === 'all'/);
+  assert.match(projects, /toggle-project-status-btn/);
+  assert.match(projects, /status: nextStatus/);
+  assert.match(backend, /'status': data\.get\('status'\) if data\.get\('status'\) in \{'active', 'completed'\} else 'active'/);
+  assert.match(backend, /data\.get\('status'\) in \{'active', 'completed'\}/);
 });

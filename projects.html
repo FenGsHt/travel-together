@@ -108,6 +108,29 @@
       gap: 20px;
     }
 
+    .project-filter {
+      display: inline-flex;
+      gap: 4px;
+      margin: -12px 0 24px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+
+    .project-filter button {
+      min-height: 30px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .project-filter button.active { color: #fff; background: var(--green); }
+
     .project-card {
       background: var(--surface);
       border: 1px solid var(--line);
@@ -128,6 +151,17 @@
       font-weight: 600;
       margin-bottom: 8px;
     }
+
+    .project-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .project-status {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .project-status.active { color: var(--green); background: var(--green-soft); }
+    .project-status.completed { color: #657068; background: #e8ece8; }
 
     .project-meta {
       display: flex;
@@ -222,7 +256,8 @@
     }
 
     .form-group input,
-    .form-group textarea {
+    .form-group textarea,
+    .form-group select {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid var(--line);
@@ -399,6 +434,12 @@
       </div>
     </div>
 
+    <div class="project-filter" aria-label="按旅程状态筛选">
+      <button type="button" class="active" data-project-status="all">全部</button>
+      <button type="button" data-project-status="active">进行中</button>
+      <button type="button" data-project-status="completed">已完成</button>
+    </div>
+
     <div id="projects-container"></div>
   </div>
 
@@ -408,6 +449,13 @@
       <div class="form-group">
         <label for="project-name">项目名称 *</label>
         <input type="text" id="project-name" required placeholder="输入项目名称" autofocus />
+      </div>
+      <div class="form-group">
+        <label for="project-mode">记录方式</label>
+        <select id="project-mode">
+          <option value="trip">旅行行程（按天安排）</option>
+          <option value="hiking">徒步路线（整条路线）</option>
+        </select>
       </div>
       <div class="dialog-actions">
         <button type="button" class="button button-ghost" id="cancel-btn">取消</button>
@@ -519,14 +567,18 @@
     const projectsContainer = document.getElementById('projects-container');
     const createDialog = document.getElementById('create-dialog');
     const createForm = document.getElementById('create-form');
+    let projectStatusFilter = 'all';
     
     function renderProjects(projects) {
-      if (projects.length === 0) {
+      const filteredProjects = projects.filter(project => (
+        projectStatusFilter === 'all' || (project.status || 'active') === projectStatusFilter
+      ));
+      if (filteredProjects.length === 0) {
         projectsContainer.innerHTML = `
           <div class="empty-state">
-            <h2>还没有旅行项目</h2>
-            <p>创建你的第一个旅行项目，开始规划精彩旅程</p>
-            <button class="button button-ink" onclick="document.getElementById('create-dialog').showModal()">+ 新建项目</button>
+            <h2>${projects.length ? '没有符合筛选条件的旅程' : '还没有旅行项目'}</h2>
+            <p>${projects.length ? '切换筛选条件，或将项目标记为已完成。' : '创建你的第一个旅行项目，开始规划精彩旅程'}</p>
+            ${projects.length ? '' : '<button class="button button-ink" onclick="document.getElementById(\'create-dialog\').showModal()">+ 新建项目</button>'}
           </div>
         `;
         return;
@@ -534,10 +586,11 @@
       
       projectsContainer.innerHTML = `
         <div class="project-grid">
-          ${projects.map(p => `
+          ${filteredProjects.map(p => `
             <div class="project-card" data-id="${p.id}">
-              <h3>${escapeHtml(p.name)}</h3>
+              <div class="project-title-row"><h3>${escapeHtml(p.name)}</h3><span class="project-status ${p.status === 'completed' ? 'completed' : 'active'}">${p.status === 'completed' ? '已完成' : '进行中'}</span></div>
               <div class="project-meta">
+                ${p.mode === 'hiking' ? '<span>🥾 徒步路线</span>' : ''}
                 ${p.destination ? `<span>📍 ${escapeHtml(p.destination)}</span>` : ''}
                 ${p.startDate ? `<span>📅 ${p.startDate} ~ ${p.endDate || '...'}</span>` : ''}
               </div>
@@ -552,12 +605,13 @@
                   <span>成员</span>
                 </div>
                 <div class="stat">
-                  <span class="stat-value">${p.data?.timeline?.length || 0}</span>
-                  <span>行程项</span>
+                  <span class="stat-value">${p.mode === 'hiking' ? (p.data?.hikingRoute?.start && p.data?.hikingRoute?.end ? 2 : 0) : (p.data?.timeline?.length || 0)}</span>
+                  <span>${p.mode === 'hiking' ? '路线点' : '行程项'}</span>
                 </div>
               </div>
               <div class="project-card-actions">
                 <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
+                <button class="toggle-project-status-btn" data-id="${p.id}" data-revision="${p.revision || 1}" data-status="${p.status || 'active'}">${p.status === 'completed' ? '重新开启' : '标记完成'}</button>
                 <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
               </div>
             </div>
@@ -584,6 +638,24 @@
           await openMembersDialog(projectId, projectName);
         });
       });
+
+      document.querySelectorAll('.toggle-project-status-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          const nextStatus = btn.dataset.status === 'completed' ? 'active' : 'completed';
+          const resp = await fetch(`${API_BASE}/api/projects/${btn.dataset.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ status: nextStatus, expectedRevision: Number(btn.dataset.revision) }),
+          });
+          if (!resp.ok) {
+            alert('更新旅程状态失败，请刷新后重试。');
+            return;
+          }
+          loadProjects();
+        });
+      });
     }
     
     function escapeHtml(text) {
@@ -599,12 +671,23 @@
     document.getElementById('cancel-btn').addEventListener('click', () => {
       createDialog.close();
     });
+
+    document.querySelectorAll('[data-project-status]').forEach(button => {
+      button.addEventListener('click', () => {
+        projectStatusFilter = button.dataset.projectStatus;
+        document.querySelectorAll('[data-project-status]').forEach(item => {
+          item.classList.toggle('active', item === button);
+        });
+        loadProjects();
+      });
+    });
     
     createForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const project = await createProject({
-        name: document.getElementById('project-name').value.trim()
+        name: document.getElementById('project-name').value.trim(),
+        mode: document.getElementById('project-mode').value
       });
       
       if (project) {

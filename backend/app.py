@@ -436,6 +436,10 @@ def create_project():
         'name': data.get('name', '未命名项目'),
         'description': data.get('description', ''),
         'destination': data.get('destination', ''),
+        # trip 为既有按天行程模式；hiking 仅记录一条徒步路线与地图轨迹。
+        'mode': data.get('mode') if data.get('mode') in {'trip', 'hiking'} else 'trip',
+        # 旧项目缺少该字段时，前端按 active 处理，保持兼容。
+        'status': data.get('status') if data.get('status') in {'active', 'completed'} else 'active',
         'startDate': data.get('startDate', ''),
         'endDate': data.get('endDate', ''),
         'createdAt': datetime.now().isoformat(),
@@ -513,6 +517,10 @@ def update_project(project_id):
             project['description'] = data['description']
         if 'destination' in data:
             project['destination'] = data['destination']
+        if data.get('mode') in {'trip', 'hiking'}:
+            project['mode'] = data['mode']
+        if data.get('status') in {'active', 'completed'}:
+            project['status'] = data['status']
         if 'startDate' in data:
             project['startDate'] = data['startDate']
         if 'endDate' in data:

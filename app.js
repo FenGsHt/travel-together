@@ -4,7 +4,7 @@ import * as api from './src/api-client.js';
 import { createProjectAutosave } from './src/project-autosave.js';
 import { findTimeConflicts } from './src/timeline-conflicts.js';
 import { realtimeClient } from './src/realtime-client.js';
-import { initMap, addMarkers, addRouteLines, getDrivingRoute, destroyMap } from './src/map-view.js';
+import { initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap } from './src/map-view.js?v=20260911-hiking-routes';
 import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
 
 // 获取当前项目
@@ -15,6 +15,8 @@ let pendingConflictSnapshot = null;
 let editor = { id: 'site-access-user', name: '协作访客' };
 let currentView = 'timeline'; // 'timeline' | 'map'
 let mapViewInitialized = false;
+let mapViewSignature = null;
+let hikingRoute = null;
 const CANVAS_ZOOM_MIN = 0.5;
 const CANVAS_ZOOM_MAX = 1.6;
 const CANVAS_ZOOM_STEP = 0.1;
@@ -26,6 +28,17 @@ const CARD_ROUTE_PORT_LABELS = {
   left: '左边',
 };
 let canvasZoom = Number(localStorage.getItem(`travel-canvas-zoom-${currentProjectId || 'default'}`)) || 0.75;
+let routeRenderFrame = null;
+
+// 拖拽、缩放和窗口尺寸变化都可能在一帧内触发多次；只保留最后一次连线计算，
+// 避免重复读取卡片布局并重建整层 SVG，保持白板操作跟手。
+function scheduleRouteRender() {
+  if (routeRenderFrame !== null) return;
+  routeRenderFrame = requestAnimationFrame(() => {
+    routeRenderFrame = null;
+    renderRouteLines();
+  });
+}
 
 const projectAutosave = createProjectAutosave({
   delay: 500,
@@ -68,6 +81,28 @@ async function loadProject() {
 
 function hydrateProjectData() {
   store.hydrate(currentProject?.data || {});
+  hikingRoute = currentProject?.data?.hikingRoute || createEmptyHikingRoute();
+}
+
+function isHikingProject() {
+  return currentProject?.mode === 'hiking';
+}
+
+function createEmptyHikingRoute() {
+  return {
+    name: '',
+    summary: '',
+    difficulty: '',
+    distance: '',
+    duration: '',
+    start: null,
+    end: null,
+  };
+}
+
+function projectDataSnapshot() {
+  const snapshot = store.snapshot();
+  return isHikingProject() ? { ...snapshot, hikingRoute } : snapshot;
 }
 
 // 更新页面标题和项目名称显示
@@ -79,6 +114,24 @@ function updateProjectUI() {
   if (projectNameEl) {
     projectNameEl.textContent = currentProject.name;
   }
+  document.body.classList.toggle('hiking-project', isHikingProject());
+  const dayNavLabel = document.querySelector('.day-nav > .eyebrow');
+  const isHiking = isHikingProject();
+  if (dayNavLabel) dayNavLabel.textContent = isHiking ? '徒步路线' : '行程树';
+  const projectCard = document.querySelector('.sidebar .project-card');
+  const projectCardText = projectCard?.querySelectorAll('p');
+  if (projectCardText?.[0]) projectCardText[0].textContent = isHiking ? '徒步项目' : '旅行项目';
+  if (projectCardText?.[1]) projectCardText[1].textContent = isHiking ? '一条路线 · 起点到终点' : '5 天 · 4 座城 · 慢一点也没关系';
+  const projectCardTitle = projectCard?.querySelector('h1');
+  if (projectCardTitle) projectCardTitle.textContent = currentProject.name;
+  const itineraryEyebrow = document.querySelector('.itinerary .section-heading .eyebrow');
+  const itineraryTitle = document.getElementById('itinerary-title');
+  const helper = document.querySelector('.itinerary .helper');
+  if (itineraryEyebrow) itineraryEyebrow.textContent = isHiking ? '共同记录的一条徒步路线' : '共同编辑的旅行画布';
+  if (itineraryTitle) itineraryTitle.textContent = isHiking ? '把整条徒步路线记在一起' : '把整段旅程铺在同一张画布上';
+  if (helper) helper.textContent = isHiking
+    ? '记录路线说明、难度与补给信息；选择起终点后，在地图中查看整条徒步轨迹。'
+    : '拖动白板空白处可移动画布；拖动旅行块可自由摆放，单击可查看详情；从卡片四边圆点拖到另一旅游块即可连接，终点会自动贴合最近边。画布支持缩放，点击箭头可为路线投票。';
 }
 
 // 添加返回按钮
@@ -140,7 +193,9 @@ async function init() {
     }
   
     // 生成天数
-    if (currentProject.startDate && currentProject.endDate) {
+    if (isHikingProject()) {
+      days = [];
+    } else if (currentProject.startDate && currentProject.endDate) {
       days = generateDays(currentProject.startDate, currentProject.endDate);
     } else {
       // 默认 5 天
@@ -172,6 +227,7 @@ async function init() {
       initialBlock('jianshui', 1, '10:30');
       initialBlock('barbecue', 1, '19:00');
       initialBlock('duoyi-tree', 3, '06:10');
+      hikingRoute = createEmptyHikingRoute();
     }
 
     // 项目加载时调用的恢复方法不应进入用户可撤销的编辑历史。
@@ -409,7 +465,7 @@ function showNotification(message) {
 }
 
 function saveProjectData() {
-  projectAutosave.schedule(store.snapshot());
+  projectAutosave.schedule(projectDataSnapshot());
 }
 
 function showEditConflict() {
@@ -453,6 +509,12 @@ function dayNavigationSummary(items) {
 function renderDayNavigation() {
   const list = document.getElementById('day-nav-list');
   if (!list) return;
+  if (isHikingProject()) {
+    const startName = hikingRoute?.start?.name || '选择起点';
+    const endName = hikingRoute?.end?.name || '选择终点';
+    list.innerHTML = `<div class="hiking-nav-summary"><b>🥾 ${escapeHtml(hikingRoute?.name || currentProject?.name || '徒步路线')}</b><span>${escapeHtml(startName)} → ${escapeHtml(endName)}</span></div>`;
+    return;
+  }
   if (!days.some(day => day.id === selectedDayId)) selectedDayId = days[0]?.id || 1;
 
   list.replaceChildren(...days.map(day => {
@@ -533,6 +595,7 @@ function setCanvasZoom(value, { preserveCenter = true } = {}) {
 
 function bindCanvasPan(viewport) {
   let panState = null;
+  let panFrame = null;
 
   const isInteractiveTarget = target => target instanceof Element && Boolean(target.closest([
     '.timeline-card',
@@ -569,12 +632,25 @@ function bindCanvasPan(viewport) {
 
   viewport.addEventListener('pointermove', event => {
     if (!panState || event.pointerId !== panState.pointerId) return;
-    viewport.scrollLeft = panState.scrollLeft - (event.clientX - panState.clientX);
-    viewport.scrollTop = panState.scrollTop - (event.clientY - panState.clientY);
+    panState.nextScrollLeft = panState.scrollLeft - (event.clientX - panState.clientX);
+    panState.nextScrollTop = panState.scrollTop - (event.clientY - panState.clientY);
+    if (panFrame !== null) return;
+    panFrame = requestAnimationFrame(() => {
+      panFrame = null;
+      if (!panState) return;
+      viewport.scrollLeft = panState.nextScrollLeft;
+      viewport.scrollTop = panState.nextScrollTop;
+    });
   });
 
   const finishPan = event => {
     if (!panState || event.pointerId !== panState.pointerId) return;
+    if (panFrame !== null) {
+      cancelAnimationFrame(panFrame);
+      panFrame = null;
+      viewport.scrollLeft = panState.nextScrollLeft;
+      viewport.scrollTop = panState.nextScrollTop;
+    }
     panState = null;
     viewport.classList.remove('is-panning');
     if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
@@ -583,6 +659,8 @@ function bindCanvasPan(viewport) {
   viewport.addEventListener('pointerup', finishPan);
   viewport.addEventListener('pointercancel', finishPan);
   viewport.addEventListener('lostpointercapture', () => {
+    if (panFrame !== null) cancelAnimationFrame(panFrame);
+    panFrame = null;
     panState = null;
     viewport.classList.remove('is-panning');
   });
@@ -642,7 +720,6 @@ function bindCanvasCardDrag(card, item) {
   card.querySelector('img')?.setAttribute('draggable', 'false');
 
   let dragState = null;
-  let routeRenderTimer = null;
   card.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.target.closest('button, input, textarea, a, [role="button"]')) return;
     const startX = Number(card.dataset.canvasX) || 0;
@@ -677,15 +754,13 @@ function bindCanvasCardDrag(card, item) {
     card.dataset.canvasY = String(Math.round(nextY));
     card.style.setProperty('--canvas-x', `${nextX}px`);
     card.style.setProperty('--canvas-y', `${nextY}px`);
-    clearTimeout(routeRenderTimer);
-    routeRenderTimer = setTimeout(renderRouteLines, 0);
+    scheduleRouteRender();
   });
 
   const finishDrag = (event, { cancelled = false } = {}) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
     const { moved, startX, startY } = dragState;
     dragState = null;
-    clearTimeout(routeRenderTimer);
     card.classList.remove('canvas-moving');
     if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
     if (cancelled) {
@@ -693,7 +768,7 @@ function bindCanvasCardDrag(card, item) {
       card.dataset.canvasY = String(startY);
       card.style.setProperty('--canvas-x', `${startX}px`);
       card.style.setProperty('--canvas-y', `${startY}px`);
-      renderRouteLines();
+      scheduleRouteRender();
     } else if (moved) {
       card.dataset.justDragged = 'true';
       store.editTimelineItem({
@@ -1185,10 +1260,100 @@ function createBranchCard(items) {
   return wrapper;
 }
 
+function formatHikingDistance(distance) {
+  if (!Number.isFinite(Number(distance))) return '';
+  return Number(distance) >= 1000
+    ? `${(Number(distance) / 1000).toFixed(1)} km`
+    : `${Math.round(Number(distance))} m`;
+}
+
+function formatHikingDuration(duration) {
+  if (!Number.isFinite(Number(duration))) return '';
+  const minutes = Math.max(1, Math.round(Number(duration) / 60));
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)} 小时${minutes % 60 ? ` ${minutes % 60} 分` : ''}`
+    : `${minutes} 分`;
+}
+
+function updateHikingRoute(patch, { rerender = false } = {}) {
+  hikingRoute = { ...createEmptyHikingRoute(), ...hikingRoute, ...patch };
+  if (rerender) {
+    render();
+    return;
+  }
+  if (currentView === 'map') renderMapView();
+  saveProjectData();
+}
+
+async function pickHikingEndpoint(kind) {
+  const currentPoint = hikingRoute?.[kind];
+  const selected = await openLocationPicker(currentPoint?.lat ?? null, currentPoint?.lng ?? null);
+  if (!selected) return;
+  hikingRoute = {
+    ...createEmptyHikingRoute(),
+    ...hikingRoute,
+    [kind]: {
+      name: selected.name || (kind === 'start' ? '徒步起点' : '徒步终点'),
+      address: selected.address || '',
+      lat: selected.lat,
+      lng: selected.lng,
+    },
+  };
+
+  if (hikingRoute.start && hikingRoute.end) {
+    const route = await getWalkingRoute(hikingRoute.start, hikingRoute.end);
+    if (route) {
+      hikingRoute.distance = formatHikingDistance(route.distance);
+      hikingRoute.duration = formatHikingDuration(route.duration);
+    }
+  }
+  render();
+}
+
+function createHikingRoutePanel() {
+  const panel = document.createElement('section');
+  panel.className = 'hiking-route-panel';
+  const route = { ...createEmptyHikingRoute(), ...hikingRoute };
+  const endpoint = (kind, label) => {
+    const point = route[kind];
+    const value = point
+      ? `${point.name || label} · ${Number(point.lat).toFixed(4)}, ${Number(point.lng).toFixed(4)}`
+      : `选择${label}`;
+    return `<button class="hiking-endpoint" type="button" data-hiking-endpoint="${kind}"><span>${kind === 'start' ? '①' : '②'} ${label}</span><b>${escapeHtml(value)}</b></button>`;
+  };
+  panel.innerHTML = `
+    <div class="hiking-route-heading">
+      <div><p class="eyebrow">徒步路线</p><h3>只记录这一整段路</h3></div>
+      <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
+    </div>
+    <p class="hiking-route-tip">不需要按第几天拆分。选择起终点后，会在地图中生成可查看的徒步轨迹。</p>
+    <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
+    <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
+    <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
+    <div class="hiking-facts">
+      <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="轻松 / 中等 / 挑战" /></label>
+      <label class="hiking-field"><span>全程距离</span><input data-hiking-field="distance" value="${escapeHtml(route.distance)}" placeholder="地图自动计算或手动填写" /></label>
+      <label class="hiking-field"><span>预计用时</span><input data-hiking-field="duration" value="${escapeHtml(route.duration)}" placeholder="地图自动计算或手动填写" /></label>
+    </div>
+  `;
+  panel.querySelectorAll('[data-hiking-field]').forEach(field => {
+    field.addEventListener('change', () => updateHikingRoute({ [field.dataset.hikingField]: field.value }));
+  });
+  panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
+    button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
+  });
+  panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
+  return panel;
+}
+
 function renderTimeline() {
   const connectorLayer = document.getElementById('route-lines');
   timeline.replaceChildren();
   if (connectorLayer) timeline.append(connectorLayer);
+  if (isHikingProject()) {
+    timeline.append(createHikingRoutePanel());
+    return;
+  }
   const template = document.querySelector('#timeline-day-template');
 
   for (const day of days) {
@@ -1298,7 +1463,7 @@ function renderTimeline() {
     });
     timeline.append(fragment);
   }
-  requestAnimationFrame(renderRouteLines);
+  scheduleRouteRender();
 }
 
 function renderLibrary(query = '') {
@@ -1419,23 +1584,57 @@ function switchView(view) {
     if (helper) helper.style.display = '';
     destroyMap();
     mapViewInitialized = false;
+    mapViewSignature = null;
   } else if (view === 'map') {
     if (boardShell) boardShell.style.display = 'none';
     mapContainer.style.display = '';
     if (helper) helper.style.display = 'none';
-    renderMapView();
+    renderMapView({ force: true });
   }
 }
 
-function renderMapView() {
+function mapSignature(items, connections) {
+  const itemSignature = items
+    .map(item => [item.id, item.name, item.time, item.lat, item.lng].join('|'))
+    .join('~');
+  const itemIds = new Set(items.map(item => item.id));
+  const connectionSignature = connections
+    .filter(connection => itemIds.has(connection.fromTimelineId) && itemIds.has(connection.toTimelineId))
+    .map(connection => `${connection.id}:${connection.fromTimelineId}:${connection.toTimelineId}`)
+    .sort()
+    .join('~');
+  return `${itemSignature}#${connectionSignature}`;
+}
+
+function hikingMapSignature(route) {
+  return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng]
+    .map(value => String(value ?? ''))
+    .join('|');
+}
+
+function renderMapView({ force = false } = {}) {
   const mapContainer = document.getElementById('map-container');
   if (!mapContainer) return;
 
   const snapshot = store.snapshot();
+  if (isHikingProject()) {
+    const nextSignature = hikingMapSignature(hikingRoute);
+    if (mapViewInitialized && !force && mapViewSignature === nextSignature) return;
+    if (!mapViewInitialized) {
+      initMap('map-canvas');
+      mapViewInitialized = true;
+    }
+    addHikingRoute(hikingRoute?.start, hikingRoute?.end);
+    mapViewSignature = nextSignature;
+    return;
+  }
   // 仅将已选择位置的行程项放入地图；排序后标记序号也与行程顺序一致。
   const items = snapshot.timeline
     .filter(item => item.lat != null && item.lng != null)
     .sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
+
+  const nextSignature = mapSignature(items, snapshot.connections);
+  if (mapViewInitialized && !force && mapViewSignature === nextSignature) return;
 
   if (!mapViewInitialized) {
     initMap('map-canvas');
@@ -1456,6 +1655,7 @@ function renderMapView() {
       }
     });
   });
+  mapViewSignature = nextSignature;
 }
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -1484,7 +1684,7 @@ function drivingInfoForConnection(connection, source, target) {
     connectionDrivingInfo.set(connection.id, route
       ? { key, status: 'ready', ...route }
       : { key, status: 'unavailable' });
-    requestAnimationFrame(renderRouteLines);
+    scheduleRouteRender();
   });
   return pending;
 }
@@ -1854,11 +2054,11 @@ function renderRouteLines() {
               ? '这条连线会形成循环路线'
               : error.message;
           showNotification(message);
-          renderRouteLines();
+          scheduleRouteRender();
         }
       }
     } else {
-      renderRouteLines();
+      scheduleRouteRender();
     }
     sourceCard = null;
     sourceId = null;
@@ -1868,7 +2068,7 @@ function renderRouteLines() {
   });
 })();
 
-window.addEventListener('resize', () => requestAnimationFrame(renderRouteLines));
+window.addEventListener('resize', scheduleRouteRender, { passive: true });
 
 document.querySelector('#search-blocks').addEventListener('input', (event) => renderLibrary(event.target.value));
 document.querySelector('#invite-button').addEventListener('click', () => document.querySelector('#invite-dialog').showModal());

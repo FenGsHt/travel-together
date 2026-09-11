@@ -7,6 +7,7 @@ let infoWindows = [];
 let routeLines = [];
 let AMap = null;
 const drivingRouteCache = new Map();
+const walkingRouteCache = new Map();
 
 function getMapSdk() {
   if (!AMap && typeof window !== 'undefined') AMap = window.AMap;
@@ -109,6 +110,86 @@ export function getDrivingRoute(source, target) {
   });
   drivingRouteCache.set(key, request);
   return request;
+}
+
+/**
+ * 查询一条徒步路线。它与驾车路线分开缓存，避免徒步项目意外显示为驾车导航。
+ * @returns {Promise<{distance: number, duration: number, path: Array}|null>}
+ */
+export function getWalkingRoute(source, target) {
+  if (!hasCoordinates(source) || !hasCoordinates(target)) return Promise.resolve(null);
+  const key = drivingCacheKey(source, target);
+  if (walkingRouteCache.has(key)) return walkingRouteCache.get(key);
+
+  const request = new Promise((resolve) => {
+    const sdk = getMapSdk();
+    const search = () => {
+      if (!AMap?.Walking) {
+        walkingRouteCache.delete(key);
+        resolve(null);
+        return;
+      }
+      const walking = new AMap.Walking();
+      walking.search(
+        new AMap.LngLat(source.lng, source.lat),
+        new AMap.LngLat(target.lng, target.lat),
+        (status, result) => {
+          const route = status === 'complete' ? result?.routes?.[0] : null;
+          if (!route || !Number.isFinite(Number(route.distance)) || !Number.isFinite(Number(route.time))) {
+            walkingRouteCache.delete(key);
+            resolve(null);
+            return;
+          }
+          resolve({
+            distance: Number(route.distance),
+            duration: Number(route.time),
+            path: routePath(route),
+          });
+        },
+      );
+    };
+
+    if (sdk?.Walking) {
+      search();
+    } else if (sdk?.plugin) {
+      sdk.plugin('AMap.Walking', search);
+    } else {
+      walkingRouteCache.delete(key);
+      resolve(null);
+    }
+  });
+  walkingRouteCache.set(key, request);
+  return request;
+}
+
+/** 在地图上呈现徒步项目的一整条起终点路线。 */
+export function addHikingRoute(start, end, onClick) {
+  if (!map || !AMap) return;
+  clearMarkers();
+  clearRouteLines();
+  if (!hasCoordinates(start) || !hasCoordinates(end)) return;
+
+  const points = [
+    { ...start, id: 'hiking-start', name: `起点 · ${start.name || '未命名'}` },
+    { ...end, id: 'hiking-end', name: `终点 · ${end.name || '未命名'}` },
+  ];
+  addMarkers(points, onClick);
+
+  const line = new AMap.Polyline({
+    path: points.map(point => new AMap.LngLat(point.lng, point.lat)),
+    strokeColor: '#255f4d',
+    strokeOpacity: 0.82,
+    strokeWeight: 5,
+    strokeStyle: 'solid',
+    lineJoin: 'round',
+    showDir: true,
+    zIndex: 20,
+  });
+  line.setMap(map);
+  routeLines.push(line);
+  getWalkingRoute(start, end).then((route) => {
+    if (route?.path?.length && routeLines.includes(line)) line.setPath(route.path);
+  });
 }
 
 /**
