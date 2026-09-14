@@ -815,6 +815,64 @@ dialog.closing {
 .quick-add-popover .qa-block-name { font-size: 12px; }
 .quick-add-popover .qa-scroll { max-height: 160px; overflow-y: auto; }
 
+/* 出行提示分点编辑器 */
+.hiking-arrival-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.hiking-arrival-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.hiking-arrival-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+.hiking-arrival-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(37,95,77,.1);
+}
+.hiking-arrival-remove {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.hiking-arrival-remove:hover {
+  background: #f5dfd6;
+  color: var(--terracotta);
+}
+.hiking-arrival-add {
+  padding: 7px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.hiking-arrival-add:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
 /* 起止点地图预览 */
 .hiking-endpoint-map {
   display: block;

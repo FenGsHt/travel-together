@@ -349,6 +349,29 @@ document.addEventListener('keydown', (event) => {
     }
     return;
   }
+
+  // ↑↓: 在卡片间导航
+  if ((key === 'arrowup' || key === 'arrowdown') && !event.ctrlKey && !event.metaKey) {
+    const cards = [...document.querySelectorAll('.timeline-card')];
+    if (cards.length === 0) return;
+    event.preventDefault();
+    const currentIdx = selectedTimelineId
+      ? cards.findIndex(c => c.dataset.timelineId === selectedTimelineId)
+      : -1;
+    let nextIdx;
+    if (key === 'arrowdown') {
+      nextIdx = currentIdx < cards.length - 1 ? currentIdx + 1 : 0;
+    } else {
+      nextIdx = currentIdx > 0 ? currentIdx - 1 : cards.length - 1;
+    }
+    const nextCard = cards[nextIdx];
+    // 取消旧选中
+    cards.forEach(c => c.classList.remove('selected'));
+    selectedTimelineId = nextCard.dataset.timelineId;
+    nextCard.classList.add('selected');
+    nextCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
 });
 
 // 选中态管理
@@ -1583,7 +1606,15 @@ function createHikingRoutePanel() {
     <div class="hiking-arrival-section">
       <span class="hiking-arrival-title">出行提示（公交／自驾／停车）</span>
       ${arrivalTipDisplay}
-      <textarea data-hiking-field="arrivalTip" placeholder="每行一条提示，如：&#10;公交：地铁 2 号线鼓山站可到景区主入口&#10;自驾：导航至鼓山停车场">${escapeHtml(route.arrivalTip)}</textarea>
+      <div class="hiking-arrival-editor" id="hiking-arrival-editor">
+        ${(route.arrivalTip || '').split('\n').filter(s => s.trim()).map((tip, i) => `
+          <div class="hiking-arrival-item" data-index="${i}">
+            <input type="text" value="${escapeHtml(tip.trim())}" class="hiking-arrival-input" placeholder="输入一条提示…" />
+            <button class="hiking-arrival-remove" data-index="${i}" type="button" title="删除此条">×</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="hiking-arrival-add" type="button" id="hiking-arrival-add">＋ 添加一条提示</button>
       <small>AI 导入时统一整理；出发前请以交通和景区当天公告为准。</small>
     </div>
     <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /><div class="hiking-cover-preview" id="hiking-cover-preview">${route.coverImage ? `<img src="${escapeHtml(route.coverImage)}" alt="封面预览" />` : ''}</div></label>
@@ -1617,6 +1648,41 @@ function createHikingRoutePanel() {
       });
     }
   });
+
+  // #26 出行提示分点编辑
+  const arrivalEditor = document.getElementById('hiking-arrival-editor');
+  const arrivalAddBtn = document.getElementById('hiking-arrival-add');
+
+  function syncArrivalTips() {
+    if (!arrivalEditor) return;
+    const tips = [...arrivalEditor.querySelectorAll('.hiking-arrival-input')]
+      .map(input => input.value.trim())
+      .filter(Boolean);
+    updateHikingRoute({ arrivalTip: tips.join('\n') });
+  }
+
+  arrivalEditor?.addEventListener('input', (e) => {
+    if (e.target.classList.contains('hiking-arrival-input')) {
+      syncArrivalTips();
+    }
+  });
+
+  arrivalEditor?.addEventListener('click', (e) => {
+    if (e.target.classList.contains('hiking-arrival-remove')) {
+      e.target.closest('.hiking-arrival-item').remove();
+      syncArrivalTips();
+    }
+  });
+
+  arrivalAddBtn?.addEventListener('click', () => {
+    if (!arrivalEditor) return;
+    const item = document.createElement('div');
+    item.className = 'hiking-arrival-item';
+    item.innerHTML = `<input type="text" class="hiking-arrival-input" placeholder="输入一条提示…" /><button class="hiking-arrival-remove" type="button" title="删除此条">×</button>`;
+    arrivalEditor.appendChild(item);
+    item.querySelector('input').focus();
+  });
+
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
   });
