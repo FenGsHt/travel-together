@@ -155,6 +155,17 @@ dialog { width: min(400px, calc(100vw - 32px)); padding: 26px; border: 0; border
 .map-info-window .info-time { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
 .map-info-window .info-coords { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; }
 
+/* 图片画廊 */
+.hiking-image-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 12px 0; }
+.hiking-gallery-img { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+
+/* 出行提示分点 */
+.hiking-arrival-section { margin: 8px 0; }
+.hiking-arrival-title { font-size: 13px; font-weight: 600; color: var(--ink); display: block; margin-bottom: 6px; }
+.hiking-arrival-list { margin: 0 0 8px; padding-left: 20px; }
+.hiking-arrival-list li { font-size: 13px; color: var(--ink); line-height: 1.7; margin-bottom: 4px; }
+.hiking-empty-tip { color: var(--muted); font-size: 12px; }
+
 /* 分支路线 */
 .branch-group { border: 1px solid #d0e4d8; border-radius: 8px; padding: 10px 12px; background: #f8faf9; margin-bottom: 8px; }
 .branch-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 11px; color: var(--green); font-weight: 600; }

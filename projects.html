@@ -456,6 +456,17 @@
       border-color: var(--green);
     }
 
+    .project-card-actions .delete-project-btn {
+      color: #b75235;
+      border-color: #ebd8bd;
+    }
+
+    .project-card-actions .delete-project-btn:hover {
+      background: #b75235;
+      border-color: #b75235;
+      color: #fff;
+    }
+
     /* 项目卡默认只展示封面与名称；详情作为悬浮浮层展开，不占用列表高度。 */
     @media (hover: hover) and (pointer: fine) {
       .project-card { z-index: 0; }
@@ -713,6 +724,7 @@
                 <div class="project-card-actions">
                   <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
                   <button class="toggle-project-status-btn" data-id="${p.id}" data-revision="${p.revision || 1}" data-status="${p.status || 'active'}">${p.status === 'completed' ? '重新开启' : '标记完成'}</button>
+                  <button class="delete-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">删除</button>
                   <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
                 </div>
               </div>
@@ -775,6 +787,22 @@
           });
           if (!resp.ok) {
             alert('更新旅程状态失败，请刷新后重试。');
+            return;
+          }
+          loadProjects();
+        });
+      });
+
+      document.querySelectorAll('.delete-project-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          if (!confirm(`确定删除项目「${btn.dataset.name}」？此操作不可恢复。`)) return;
+          const resp = await fetch(`${API_BASE}/api/projects/${btn.dataset.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (!resp.ok) {
+            alert('删除项目失败，请刷新后重试。');
             return;
           }
           loadProjects();

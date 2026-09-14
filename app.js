@@ -93,6 +93,7 @@ function createEmptyHikingRoute() {
     name: '',
     summary: '',
     coverImage: '',
+    images: [],
     arrivalTip: '',
     difficulty: '',
     distance: '',
@@ -1329,6 +1330,21 @@ function createHikingRoutePanel() {
       : `选择${label}`;
     return `<button class="hiking-endpoint" type="button" data-hiking-endpoint="${kind}"><span>${kind === 'start' ? '①' : '②'} ${label}</span><b>${escapeHtml(value)}</b></button>`;
   };
+
+  // 图片画廊
+  const allImages = [route.coverImage, ...(route.images || [])].filter(Boolean);
+  const imageGallery = allImages.length > 0
+    ? `<div class="hiking-image-gallery">${allImages.map((src, i) => `<img class="hiking-gallery-img" src="${escapeHtml(src)}" alt="路线图片${i + 1}" />`).join('')}</div>`
+    : '';
+
+  // 出行提示分点显示
+  const arrivalTipHtml = route.arrivalTip
+    ? route.arrivalTip.split('\n').filter(s => s.trim()).map(s => `<li>${escapeHtml(s.trim())}</li>`).join('')
+    : '';
+  const arrivalTipDisplay = arrivalTipHtml
+    ? `<ul class="hiking-arrival-list">${arrivalTipHtml}</ul>`
+    : '<small class="hiking-empty-tip">暂无出行提示</small>';
+
   panel.innerHTML = `
     <div class="hiking-route-hero">
       <div class="hiking-route-cover">${cover}</div>
@@ -1337,11 +1353,18 @@ function createHikingRoutePanel() {
         <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
       </div>
     </div>
+    ${imageGallery}
     <p class="hiking-route-tip">不需要按第几天拆分。选择起终点后，会在地图中生成可查看的徒步轨迹。</p>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
-    <label class="hiking-field hiking-arrival-tip"><span>出行提示（公交／自驾／停车）</span><textarea data-hiking-field="arrivalTip" placeholder="集中记录如何前往、公共交通、自驾导航和停车位置">${escapeHtml(route.arrivalTip)}</textarea><small>AI 导入时统一整理；出发前请以交通和景区当天公告为准。</small></label>
+    <div class="hiking-arrival-section">
+      <span class="hiking-arrival-title">出行提示（公交／自驾／停车）</span>
+      ${arrivalTipDisplay}
+      <textarea data-hiking-field="arrivalTip" placeholder="每行一条提示，如：&#10;公交：地铁 2 号线鼓山站可到景区主入口&#10;自驾：导航至鼓山停车场">${escapeHtml(route.arrivalTip)}</textarea>
+      <small>AI 导入时统一整理；出发前请以交通和景区当天公告为准。</small>
+    </div>
     <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /></label>
+    <label class="hiking-field"><span>更多图片链接（每行一个）</span><textarea data-hiking-field="imagesRaw" rows="3" placeholder="每行粘贴一个图片链接">${(route.images || []).join('\n')}</textarea></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
     <div class="hiking-facts">
       <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="轻松 / 中等 / 挑战" /></label>
@@ -1350,7 +1373,15 @@ function createHikingRoutePanel() {
     </div>
   `;
   panel.querySelectorAll('[data-hiking-field]').forEach(field => {
-    field.addEventListener('change', () => updateHikingRoute({ [field.dataset.hikingField]: field.value }));
+    field.addEventListener('change', () => {
+      const key = field.dataset.hikingField;
+      let value = field.value;
+      if (key === 'imagesRaw') {
+        updateHikingRoute({ images: value.split('\n').map(s => s.trim()).filter(Boolean) });
+      } else {
+        updateHikingRoute({ [key]: value });
+      }
+    });
   });
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
