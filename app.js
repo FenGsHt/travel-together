@@ -1614,24 +1614,23 @@ function renderTimeline() {
     dropZone.addEventListener('click', (event) => {
       // 只响应空白区域的点击（drop-zone 自身或 drop-hint）
       if (!dropZone.contains(event.target)) return;
-      if (event.target.closest('.timeline-card, .branch-group, .add-slot')) return;
+      if (event.target.closest('.timeline-card, .branch-group, .add-slot, .quick-add-popover')) return;
 
       // 关闭已有的气泡
       closeQuickAddPopover();
-
-      const rect = dropZone.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-
-      const popover = document.createElement('div');
-      popover.className = 'quick-add-popover';
-      popover.style.left = `${Math.min(x, rect.width - 200)}px`;
-      popover.style.top = `${y}px`;
 
       const blocks = store.snapshot().blocks;
       const existingItems = timelineItemsFor(day.id);
       const hour = String(Math.min(19, 9 + existingItems.length * 2)).padStart(2, '0');
       const timeStr = `${hour}:00`;
+
+      const popover = document.createElement('div');
+      popover.className = 'quick-add-popover';
+      // 用 fixed 定位挂到 body 上，避免被 dropZone 的 click 事件误关
+      popover.style.position = 'fixed';
+      popover.style.left = `${Math.min(event.clientX, window.innerWidth - 210)}px`;
+      popover.style.top = `${event.clientY}px`;
+      popover.style.zIndex = '100';
 
       let html = `<button data-action="new"><span class="qa-icon">＋</span>新建行程</button>`;
       if (blocks.length > 0) {
@@ -1648,12 +1647,12 @@ function renderTimeline() {
         html += `</div>`;
       }
       popover.innerHTML = html;
-      dropZone.style.position = 'relative';
-      dropZone.appendChild(popover);
+      document.body.appendChild(popover);
       quickAddPopover = popover;
 
       // 点击气泡按钮
       popover.addEventListener('click', (e) => {
+        e.stopPropagation();
         const btn = e.target.closest('button');
         if (!btn) return;
         const action = btn.dataset.action;
@@ -1674,14 +1673,13 @@ function renderTimeline() {
         }
       });
 
-      // 点击外部关闭
+      // 点击外部关闭（但忽略 originating dropZone 的冒泡）
       const outsideHandler = (e) => {
-        if (!popover.contains(e.target)) {
-          closeQuickAddPopover();
-          document.removeEventListener('click', outsideHandler);
-        }
+        if (popover.contains(e.target)) return;
+        if (dropZone.contains(e.target)) return; // 忽略 dropZone 自身的冒泡
+        closeQuickAddPopover();
+        document.removeEventListener('click', outsideHandler);
       };
-      // 延迟添加，避免本次点击触发关闭
       requestAnimationFrame(() => document.addEventListener('click', outsideHandler));
     });
 

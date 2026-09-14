@@ -738,15 +738,13 @@ dialog.closing {
 
 /* 快速新增气泡 */
 .quick-add-popover {
-  position: absolute;
-  z-index: 20;
   min-width: 180px;
   padding: 6px;
   border: 1px solid #dfe3e7;
   border-radius: 12px;
   background: rgba(255,255,255,.97);
   box-shadow: 0 8px 24px rgba(35,43,50,.12), 0 2px 6px rgba(35,43,50,.06);
-  transform-origin: top left;
+  transform-origin: top center;
   animation: popover-in 120ms ease-out forwards;
 }
 .quick-add-popover.closing {
