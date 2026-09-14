@@ -711,6 +711,53 @@ dialog { width: min(400px, calc(100vw - 32px)); padding: 26px; border: 0; border
 .travel-block { grid-template-columns: 64px minmax(0, 1fr) auto; min-height: 72px; border-color: #e0e4e7; border-radius: 10px; background: #fff; }
 .travel-block img { width: 64px; height: 56px; border-radius: 8px; }
 
+/* 快速新增气泡 */
+.quick-add-popover {
+  position: absolute;
+  z-index: 20;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid #dfe3e7;
+  border-radius: 12px;
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 8px 24px rgba(35,43,50,.12), 0 2px 6px rgba(35,43,50,.06);
+  transform-origin: top left;
+  animation: popover-in 120ms ease-out forwards;
+}
+.quick-add-popover.closing {
+  animation: popover-out 100ms ease-in forwards;
+}
+@keyframes popover-in {
+  from { opacity: 0; transform: scale(0.85) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes popover-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.9) translateY(-4px); }
+}
+.quick-add-popover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.quick-add-popover button:hover { background: var(--green-soft); }
+.quick-add-popover button .qa-icon { font-size: 16px; width: 22px; text-align: center; }
+.quick-add-popover .qa-divider { height: 1px; margin: 4px 8px; background: #eef0f2; }
+.quick-add-popover .qa-block-item { display: flex; align-items: center; gap: 8px; }
+.quick-add-popover .qa-block-item img { width: 28px; height: 24px; object-fit: cover; border-radius: 4px; }
+.quick-add-popover .qa-block-name { font-size: 12px; }
+.quick-add-popover .qa-scroll { max-height: 160px; overflow-y: auto; }
+
 @media (max-width: 1120px) {
   .workspace { grid-template-columns: 204px minmax(460px,1fr); }
   .inspector { grid-column: 2; display: grid; grid-template-columns: 1.15fr .85fr; gap: 24px; }

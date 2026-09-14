@@ -1396,7 +1396,66 @@ function createHikingRoutePanel() {
   return panel;
 }
 
+let quickAddPopover = null;
+function closeQuickAddPopover() {
+  if (!quickAddPopover) return;
+  quickAddPopover.classList.add('closing');
+  const el = quickAddPopover;
+  quickAddPopover = null;
+  setTimeout(() => el.remove(), 100);
+}
+
+function openAddSlotDialog(dayId, defaultTime = '10:00') {
+  const dialog = document.getElementById('add-slot-dialog');
+  const form = document.getElementById('add-slot-form');
+  const blockSelect = document.getElementById('slot-block-id');
+  const nameInput = document.getElementById('slot-name');
+  const timeInput = document.getElementById('slot-time');
+  const blocks = store.snapshot().blocks;
+
+  blockSelect.replaceChildren();
+  const newBlockOption = document.createElement('option');
+  newBlockOption.value = '';
+  newBlockOption.textContent = '新建旅游块';
+  blockSelect.append(newBlockOption);
+  blocks.forEach(block => {
+    const option = document.createElement('option');
+    option.value = block.id;
+    option.textContent = block.name;
+    blockSelect.append(option);
+  });
+
+  const syncSelectedBlock = () => {
+    const selectedBlock = blocks.find(block => block.id === blockSelect.value);
+    nameInput.value = selectedBlock?.name || '';
+    nameInput.readOnly = Boolean(selectedBlock);
+    nameInput.placeholder = selectedBlock ? '将使用所选旅游块' : '行程名称';
+  };
+
+  blockSelect.value = '';
+  syncSelectedBlock();
+  timeInput.value = defaultTime;
+  blockSelect.onchange = syncSelectedBlock;
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const selectedBlock = blocks.find(block => block.id === blockSelect.value);
+    const name = nameInput.value.trim();
+    const time = timeInput.value;
+    if (!time || (!selectedBlock && !name)) return;
+    const blockId = selectedBlock
+      ? selectedBlock.id
+      : store.createTravelBlock({ name, image: 'diannan-images/spots/建水古城.jpg' }).id;
+    store.scheduleBlock({ blockId, day: dayId, time, editor });
+    dialog.close();
+    render();
+  };
+
+  dialog.showModal();
+}
+
 function renderTimeline() {
+  closeQuickAddPopover();
   const connectorLayer = document.getElementById('route-lines');
   timeline.replaceChildren();
   if (connectorLayer) timeline.append(connectorLayer);
@@ -1463,53 +1522,84 @@ function renderTimeline() {
         render();
       }
     });
-    fragment.querySelector('.add-slot').addEventListener('click', () => {
-      const dialog = document.getElementById('add-slot-dialog');
-      const form = document.getElementById('add-slot-form');
-      const blockSelect = document.getElementById('slot-block-id');
-      const nameInput = document.getElementById('slot-name');
-      const timeInput = document.getElementById('slot-time');
-      const blocks = store.snapshot().blocks;
 
-      blockSelect.replaceChildren();
-      const newBlockOption = document.createElement('option');
-      newBlockOption.value = '';
-      newBlockOption.textContent = '新建旅游块';
-      blockSelect.append(newBlockOption);
-      blocks.forEach(block => {
-        const option = document.createElement('option');
-        option.value = block.id;
-        option.textContent = block.name;
-        blockSelect.append(option);
+    // 点击空白处弹出快速新增气泡
+    dropZone.addEventListener('click', (event) => {
+      // 只响应空白区域的点击（drop-zone 自身或 drop-hint）
+      if (!dropZone.contains(event.target)) return;
+      if (event.target.closest('.timeline-card, .branch-group, .add-slot')) return;
+
+      // 关闭已有的气泡
+      closeQuickAddPopover();
+
+      const rect = dropZone.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      const popover = document.createElement('div');
+      popover.className = 'quick-add-popover';
+      popover.style.left = `${Math.min(x, rect.width - 200)}px`;
+      popover.style.top = `${y}px`;
+
+      const blocks = store.snapshot().blocks;
+      const existingItems = timelineItemsFor(day.id);
+      const hour = String(Math.min(19, 9 + existingItems.length * 2)).padStart(2, '0');
+      const timeStr = `${hour}:00`;
+
+      let html = `<button data-action="new"><span class="qa-icon">＋</span>新建行程</button>`;
+      if (blocks.length > 0) {
+        html += `<div class="qa-divider"></div><div class="qa-scroll">`;
+        blocks.slice(0, 6).forEach(block => {
+          const img = block.image
+            ? `<img src="${escapeHtml(block.image)}" alt="">`
+            : `<span class="qa-icon">◻</span>`;
+          html += `<button data-action="pick" data-block-id="${escapeHtml(block.id)}"><span class="qa-block-item">${img}<span class="qa-block-name">${escapeHtml(block.name)}</span></span></button>`;
+        });
+        if (blocks.length > 6) {
+          html += `<button data-action="more"><span class="qa-icon">▤</span>更多灵感库…</button>`;
+        }
+        html += `</div>`;
+      }
+      popover.innerHTML = html;
+      dropZone.style.position = 'relative';
+      dropZone.appendChild(popover);
+      quickAddPopover = popover;
+
+      // 点击气泡按钮
+      popover.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const action = btn.dataset.action;
+
+        if (action === 'new') {
+          closeQuickAddPopover();
+          openAddSlotDialog(day.id, timeStr);
+        } else if (action === 'pick') {
+          const blockId = btn.dataset.blockId;
+          store.scheduleBlock({ blockId, day: day.id, time: timeStr, editor });
+          closeQuickAddPopover();
+          render();
+        } else if (action === 'more') {
+          closeQuickAddPopover();
+          // 滚动到灵感库面板
+          document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' });
+          document.getElementById('search-blocks')?.focus();
+        }
       });
 
-      const syncSelectedBlock = () => {
-        const selectedBlock = blocks.find(block => block.id === blockSelect.value);
-        nameInput.value = selectedBlock?.name || '';
-        nameInput.readOnly = Boolean(selectedBlock);
-        nameInput.placeholder = selectedBlock ? '将使用所选旅游块' : '行程名称';
+      // 点击外部关闭
+      const outsideHandler = (e) => {
+        if (!popover.contains(e.target)) {
+          closeQuickAddPopover();
+          document.removeEventListener('click', outsideHandler);
+        }
       };
+      // 延迟添加，避免本次点击触发关闭
+      requestAnimationFrame(() => document.addEventListener('click', outsideHandler));
+    });
 
-      blockSelect.value = '';
-      syncSelectedBlock();
-      timeInput.value = '10:00';
-      blockSelect.onchange = syncSelectedBlock;
-
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        const selectedBlock = blocks.find(block => block.id === blockSelect.value);
-        const name = nameInput.value.trim();
-        const time = timeInput.value;
-        if (!time || (!selectedBlock && !name)) return;
-        const blockId = selectedBlock
-          ? selectedBlock.id
-          : store.createTravelBlock({ name, image: 'diannan-images/spots/建水古城.jpg' }).id;
-        store.scheduleBlock({ blockId, day: day.id, time, editor });
-        dialog.close();
-        render();
-      };
-
-      dialog.showModal();
+    fragment.querySelector('.add-slot').addEventListener('click', () => {
+      openAddSlotDialog(day.id);
     });
     timeline.append(fragment);
   }
