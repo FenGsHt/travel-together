@@ -24,6 +24,29 @@ HTMLDialogElement.prototype.close = function(returnValue) {
   }, { once: true });
 };
 
+// 操作反馈 toast
+let toastTimer = null;
+function showToast(message, icon = '✓') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast-item';
+  toast.innerHTML = `<span class="toast-icon">${icon}</span>${escapeHtml(message)}`;
+  container.appendChild(toast);
+  // 触发 reflow 以启动动画
+  toast.offsetHeight;
+  toast.classList.add('toast-visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('toast-visible');
+    setTimeout(() => toast.remove(), 200);
+  }, 2000);
+}
+
 let currentProject = null;
 let autosaveEnabled = false;
 let pendingConflictSnapshot = null;
@@ -818,6 +841,7 @@ function bindCanvasCardDrag(card, item) {
       const finalTime = snapTimeTo5Min(displayTime);
       if (finalTime !== origTime) {
         store.editTimelineItem({ timelineId: item.id, time: finalTime, editor });
+        showToast(`时间改为 ${finalTime}`, '🕐');
       }
       render();
       return;
@@ -992,6 +1016,7 @@ function createTimelineCard(item) {
         const newName = input.value.trim();
         if (newName && newName !== item.name) {
           store.editTimelineItem({ timelineId: item.id, name: newName, editor });
+          showToast('名称已更新', '✏️');
         }
       }
       render();
@@ -1470,13 +1495,13 @@ function createHikingRoutePanel() {
       <textarea data-hiking-field="arrivalTip" placeholder="每行一条提示，如：&#10;公交：地铁 2 号线鼓山站可到景区主入口&#10;自驾：导航至鼓山停车场">${escapeHtml(route.arrivalTip)}</textarea>
       <small>AI 导入时统一整理；出发前请以交通和景区当天公告为准。</small>
     </div>
-    <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /></label>
+    <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /><div class="hiking-cover-preview" id="hiking-cover-preview">${route.coverImage ? `<img src="${escapeHtml(route.coverImage)}" alt="封面预览" />` : ''}</div></label>
     <label class="hiking-field"><span>更多图片链接（每行一个）</span><textarea data-hiking-field="imagesRaw" rows="3" placeholder="每行粘贴一个图片链接">${(route.images || []).join('\n')}</textarea></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
     <div class="hiking-facts">
-      <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="轻松 / 中等 / 挑战" /></label>
-      <label class="hiking-field"><span>全程距离</span><input data-hiking-field="distance" value="${escapeHtml(route.distance)}" placeholder="地图自动计算或手动填写" /></label>
-      <label class="hiking-field"><span>预计用时</span><input data-hiking-field="duration" value="${escapeHtml(route.duration)}" placeholder="地图自动计算或手动填写" /></label>
+      <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="如：中等（约 2633 级台阶）" /></label>
+      <label class="hiking-field"><span>全程距离</span><input data-hiking-field="distance" value="${escapeHtml(route.distance)}" placeholder="如：约 3.5 km（官方资料）" /></label>
+      <label class="hiking-field"><span>预计用时</span><input data-hiking-field="duration" value="${escapeHtml(route.duration)}" placeholder="如：约 2-3 小时（建议预留）" /></label>
     </div>
   `;
   panel.querySelectorAll('[data-hiking-field]').forEach(field => {
@@ -1489,6 +1514,17 @@ function createHikingRoutePanel() {
         updateHikingRoute({ [key]: value });
       }
     });
+    // #21 封面图片实时预览
+    if (field.dataset.hikingField === 'coverImage') {
+      field.addEventListener('input', () => {
+        const preview = document.getElementById('hiking-cover-preview');
+        if (preview) {
+          preview.innerHTML = field.value.trim()
+            ? `<img src="${escapeHtml(field.value.trim())}" alt="封面预览" onerror="this.parentElement.innerHTML=''" />`
+            : '';
+        }
+      });
+    }
   });
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
@@ -1556,9 +1592,20 @@ function openAddSlotDialog(dayId, defaultTime = '10:00') {
     store.scheduleBlock({ blockId, day: dayId, time, editor });
     dialog.close();
     render();
+    showToast('行程已添加', '＋');
+    // #8 新建后自动聚焦到名称输入框
+    requestAnimationFrame(() => {
+      const newCard = document.querySelector(`[data-timeline-id]`);
+      if (newCard) {
+        const nameInput = newCard.querySelector('.note');
+        nameInput?.focus();
+      }
+    });
   };
 
   dialog.showModal();
+  // 自动聚焦名称输入框
+  requestAnimationFrame(() => nameInput.focus());
 }
 
 function renderTimeline() {
@@ -1685,6 +1732,7 @@ function renderTimeline() {
           store.scheduleBlock({ blockId, day: day.id, time: timeStr, editor });
           closeQuickAddPopover();
           render();
+          showToast('已添加到行程', '＋');
         } else if (action === 'more') {
           closeQuickAddPopover();
           // 滚动到灵感库面板
@@ -1723,6 +1771,7 @@ function renderLibrary(query = '') {
       element.className = 'travel-block';
       element.draggable = true;
       element.dataset.blockId = block.id;
+      element.dataset.category = block.category || '';
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
       element.setAttribute('aria-label', `${block.name}，单击查看详情，拖动可加入行程`);
