@@ -9,6 +9,7 @@ import json
 import hmac
 import hashlib
 import fcntl
+from copy import deepcopy
 from contextlib import contextmanager
 from datetime import datetime
 from urllib.parse import urlencode
@@ -49,6 +50,15 @@ SITE_ACCESS_USER_NAME = os.getenv('SITE_ACCESS_USER_NAME', '协作访客')
 # AI API Key（从环境变量读取）
 AI_API_KEY = os.getenv('AI_API_KEY', '')
 AMAP_SECURITY_JS_CODE = os.getenv('AMAP_SECURITY_JS_CODE', '')
+
+# 所有外部 AI 整理项目时都会读取的统一研究规则。它不是展示文案，
+# 而是要求 AI 在落库前先检索、核验并交代来源的系统提示。
+AI_RESEARCH_SYSTEM_PROMPT = """你是旅行信息研究助手。整理或导入路线前必须先搜索公开网页，优先采用景区、交通主管部门、政府或运营方的最新资料；不能凭常识补全信息。
+当任务涉及徒步路线时，必须检索并输出：
+1. 可展示的封面图片 URL 及其来源页；
+2. 一段统一的“出行提示”，依次概括公交/地铁如何到起点、自驾导航建议、停车场名称或位置、以及出发前需复核的开放/收费/车位信息；
+3. 起点、终点、难度、距离、预计用时和至少两条可访问来源链接。
+不确定、时效性强或无法核验的内容必须明确标注“请以当天公告为准”，不得虚构线路、班次、停车位、费用或图片来源。"""
 
 # 备用地理编码结果仅缓存短时间，避免在高德检索不可用时对公开服务重复发起相同请求。
 GEOCODING_CACHE = {}
@@ -816,6 +826,67 @@ def ai_create_poll(project_id):
     })
 
 
+@app.route('/api/ai/projects/<project_id>/hiking-route', methods=['POST'])
+@require_ai_auth
+def ai_import_hiking_route(project_id):
+    """导入经检索并附带来源的整条徒步路线。"""
+    data = request.get_json(silent=True) or {}
+    route = data.get('route')
+    if not isinstance(route, dict):
+        return jsonify({'error': '缺少 route 对象'}), 400
+
+    sources = route.get('sources')
+    if not isinstance(sources, list) or len(sources) < 2:
+        return jsonify({'error': '徒步路线至少需要两条检索来源'}), 400
+    if any(not isinstance(source, str) or not source.startswith(('https://', 'http://')) for source in sources):
+        return jsonify({'error': 'sources 必须是有效的 http(s) 链接'}), 400
+    if not isinstance(route.get('name'), str) or not route['name'].strip():
+        return jsonify({'error': '缺少路线名称'}), 400
+    if not isinstance(route.get('arrivalTip'), str) or not route['arrivalTip'].strip():
+        return jsonify({'error': '缺少统一的出行提示'}), 400
+
+    endpoints = ('start', 'end')
+    for endpoint in endpoints:
+        point = route.get(endpoint)
+        if not isinstance(point, dict):
+            return jsonify({'error': f'缺少{endpoint}地点'}), 400
+        try:
+            float(point['lat'])
+            float(point['lng'])
+        except (KeyError, TypeError, ValueError):
+            return jsonify({'error': f'{endpoint}地点缺少有效坐标'}), 400
+
+    with locked_projects_for_update() as projects:
+        project = next((p for p in projects if p['id'] == project_id), None)
+        if not project:
+            return jsonify({'error': '项目不存在'}), 404
+
+        imported_route = deepcopy(route)
+        imported_route['name'] = imported_route['name'].strip()
+        imported_route['sources'] = list(dict.fromkeys(sources))
+        imported_route['importedBy'] = 'ai-research'
+        imported_route['importedAt'] = datetime.now().isoformat()
+        imported_route['researchPromptVersion'] = 'hiking-research-v1'
+        project.setdefault('data', {})['hikingRoute'] = imported_route
+        project['mode'] = 'hiking'
+        project['revision'] = project_revision(project) + 1
+        project['updatedAt'] = datetime.now().isoformat()
+        project['data'].setdefault('activity', []).insert(0, {
+            'id': f"ai-route-import-{int(datetime.now().timestamp() * 1000)}",
+            'type': 'ai.route.imported',
+            'editor': {'id': 'ai-research', 'name': 'AI 路线助手'},
+            'at': datetime.now().isoformat(),
+            'detail': '已按统一研究提示检索并导入徒步路线',
+            'sources': imported_route['sources'],
+        })
+
+    return jsonify({
+        'success': True,
+        'route': imported_route,
+        'research_prompt_version': imported_route['researchPromptVersion'],
+    })
+
+
 @app.route('/api/ai/projects/<project_id>/summary', methods=['GET'])
 @require_ai_auth
 def ai_get_summary(project_id):
@@ -831,6 +902,8 @@ def ai_get_summary(project_id):
         'name': project['name'],
         'description': project.get('description', ''),
         'destination': project.get('destination', ''),
+        'mode': project.get('mode', 'trip'),
+        'ai_research_prompt': AI_RESEARCH_SYSTEM_PROMPT,
         'startDate': project.get('startDate', ''),
         'endDate': project.get('endDate', ''),
         'blocks_count': len(project['data']['blocks']),
@@ -838,7 +911,8 @@ def ai_get_summary(project_id):
         'polls_count': len(project['data']['polls']),
         'blocks': project['data']['blocks'],
         'timeline': project['data']['timeline'],
-        'polls': project['data']['polls']
+        'polls': project['data']['polls'],
+        'hikingRoute': project['data'].get('hikingRoute')
     }
     
     return jsonify(summary)

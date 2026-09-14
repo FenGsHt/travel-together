@@ -92,6 +92,8 @@ function createEmptyHikingRoute() {
   return {
     name: '',
     summary: '',
+    coverImage: '',
+    arrivalTip: '',
     difficulty: '',
     distance: '',
     duration: '',
@@ -611,7 +613,8 @@ function bindCanvasPan(viewport) {
   ].join(', ')));
 
   viewport.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || isInteractiveTarget(event.target)) return;
+    // 徒步路线是普通表单页，不应被白板平移手势截获，保证触控与滚动自然传递给页面。
+    if (isHikingProject() || event.button !== 0 || isInteractiveTarget(event.target)) return;
 
     const viewportRect = viewport.getBoundingClientRect();
     const isOnScrollbar = event.clientX >= viewportRect.left + viewport.clientWidth
@@ -687,12 +690,14 @@ function initCanvasControls() {
   });
 
   viewport.addEventListener('wheel', event => {
+    if (isHikingProject()) return;
     if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     setCanvasZoom(canvasZoom + (event.deltaY < 0 ? CANVAS_ZOOM_STEP : -CANVAS_ZOOM_STEP));
   }, { passive: false });
 
   viewport.addEventListener('keydown', event => {
+    if (isHikingProject()) return;
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
       setCanvasZoom(canvasZoom + CANVAS_ZOOM_STEP);
@@ -1314,6 +1319,9 @@ function createHikingRoutePanel() {
   const panel = document.createElement('section');
   panel.className = 'hiking-route-panel';
   const route = { ...createEmptyHikingRoute(), ...hikingRoute };
+  const cover = route.coverImage
+    ? `<img class="hiking-cover-image" src="${escapeHtml(route.coverImage)}" alt="${escapeHtml(route.name || '徒步路线封面')}" />`
+    : '<span class="hiking-cover-placeholder">🥾<small>等待路线封面</small></span>';
   const endpoint = (kind, label) => {
     const point = route[kind];
     const value = point
@@ -1322,13 +1330,18 @@ function createHikingRoutePanel() {
     return `<button class="hiking-endpoint" type="button" data-hiking-endpoint="${kind}"><span>${kind === 'start' ? '①' : '②'} ${label}</span><b>${escapeHtml(value)}</b></button>`;
   };
   panel.innerHTML = `
-    <div class="hiking-route-heading">
-      <div><p class="eyebrow">徒步路线</p><h3>只记录这一整段路</h3></div>
-      <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
+    <div class="hiking-route-hero">
+      <div class="hiking-route-cover">${cover}</div>
+      <div class="hiking-route-heading">
+        <div><p class="eyebrow">徒步路线</p><h3>只记录这一整段路</h3></div>
+        <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
+      </div>
     </div>
     <p class="hiking-route-tip">不需要按第几天拆分。选择起终点后，会在地图中生成可查看的徒步轨迹。</p>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
+    <label class="hiking-field hiking-arrival-tip"><span>出行提示（公交／自驾／停车）</span><textarea data-hiking-field="arrivalTip" placeholder="集中记录如何前往、公共交通、自驾导航和停车位置">${escapeHtml(route.arrivalTip)}</textarea><small>AI 导入时统一整理；出发前请以交通和景区当天公告为准。</small></label>
+    <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
     <div class="hiking-facts">
       <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="轻松 / 中等 / 挑战" /></label>
@@ -1341,6 +1354,12 @@ function createHikingRoutePanel() {
   });
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
+  });
+  panel.querySelector('.hiking-cover-image')?.addEventListener('error', (event) => {
+    const coverElement = event.currentTarget.closest('.hiking-route-cover');
+    if (!coverElement) return;
+    coverElement.classList.add('is-unavailable');
+    event.currentTarget.remove();
   });
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
   return panel;

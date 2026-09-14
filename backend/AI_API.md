@@ -167,11 +167,46 @@ API Key 通过环境变量 `AI_API_KEY` 配置。
 
 ---
 
-### 4. 获取项目摘要
+### 4. 导入徒步路线（必须先检索）
+
+**POST** `/api/ai/projects/{project_id}/hiking-route`
+
+调用方先读取项目摘要中的 `ai_research_prompt`，并按该统一提示检索公开资料后，再导入路线。接口强制要求至少两条来源链接、封面图、统一的出行提示和起终点坐标。
+
+**请求体：**
+
+```json
+{
+  "route": {
+    "name": "鼓山千年古道 · 下院至涌泉寺",
+    "coverImage": "https://example.com/gushan-cover.jpg",
+    "coverImageSource": "https://example.com/source-page",
+    "summary": "路线简介与安全提醒",
+    "arrivalTip": "公交：……\n自驾：……\n停车：……\n请以当天公告为准。",
+    "difficulty": "中等",
+    "distance": "约 3.5 km",
+    "duration": "约 2–3 小时",
+    "start": { "name": "鼓山登山古道入口", "lat": 26.0812, "lng": 119.3924 },
+    "end": { "name": "涌泉寺", "lat": 26.0585, "lng": 119.3906 },
+    "sources": ["https://example.com/source-1", "https://example.com/source-2"]
+  }
+}
+```
+
+**响应：**
+
+```json
+{
+  "success": true,
+  "research_prompt_version": "hiking-research-v1"
+}
+```
+
+### 5. 获取项目摘要
 
 **GET** `/api/ai/projects/{project_id}/summary`
 
-获取项目的完整信息，供 AI 分析和决策。
+获取项目的完整信息，供 AI 分析和决策。响应中的 `ai_research_prompt` 是所有 AI 整理任务必须遵循的统一研究提示；涉及徒步路线时，必须先检索、保留来源，再调用导入接口。
 
 **响应：**
 

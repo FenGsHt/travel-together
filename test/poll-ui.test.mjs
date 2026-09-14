@@ -163,6 +163,7 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
   const projects = await readFile(new URL('../projects.html', import.meta.url), 'utf8');
   const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
+  const backend = await readFile(new URL('../backend/app.py', import.meta.url), 'utf8');
 
   assert.match(projects, /value="hiking">徒步路线/);
   assert.match(app, /function isHikingProject/);
@@ -172,6 +173,20 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(mapView, /export function getWalkingRoute/);
   assert.match(mapView, /export function addHikingRoute/);
   assert.match(styles, /\.hiking-route-panel/);
+  assert.match(styles, /\.hiking-project \.board-viewport \{\n  height: auto;\n  min-height: 0;\n  overflow: visible;/);
+  assert.match(styles, /\.hiking-project \.timeline \{ width: 100%; min-height: 0; padding: 34px 12px 96px; \}/);
+  assert.match(app, /coverImage: ''/);
+  assert.match(app, /arrivalTip: ''/);
+  assert.match(app, /出行提示（公交／自驾／停车）/);
+  assert.match(app, /hiking-route-cover/);
+  assert.match(styles, /\.hiking-route-hero/);
+  assert.match(styles, /\.hiking-project \.board-viewport \{[\s\S]*background: transparent;[\s\S]*touch-action: auto;/);
+  assert.match(styles, /\.hiking-project \.hiking-route-panel \{[\s\S]*box-shadow: none;/);
+  assert.match(app, /if \(isHikingProject\(\) \|\| event\.button !== 0/);
+  assert.match(app, /if \(isHikingProject\(\)\) return;\n    if \(!event\.ctrlKey/);
+  assert.match(backend, /AI_RESEARCH_SYSTEM_PROMPT/);
+  assert.match(backend, /\/api\/ai\/projects\/<project_id>\/hiking-route/);
+  assert.match(backend, /徒步路线至少需要两条检索来源/);
 });
 
 test('projects can filter journeys by completion and update their status', async () => {
@@ -184,4 +199,13 @@ test('projects can filter journeys by completion and update their status', async
   assert.match(projects, /status: nextStatus/);
   assert.match(backend, /'status': data\.get\('status'\) if data\.get\('status'\) in \{'active', 'completed'\} else 'active'/);
   assert.match(backend, /data\.get\('status'\) in \{'active', 'completed'\}/);
+});
+
+test('clicking a project card enters it without intercepting card action buttons', async () => {
+  const projects = await readFile(new URL('../projects.html', import.meta.url), 'utf8');
+
+  assert.match(projects, /const enterProject = \(projectId\) =>/);
+  assert.match(projects, /document\.querySelectorAll\('\.project-card'\)\.forEach/);
+  assert.match(projects, /event\.target\.closest\('button, a, input, select, textarea, label'\)/);
+  assert.match(projects, /enterProject\(card\.dataset\.id\)/);
 });

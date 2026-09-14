@@ -78,23 +78,23 @@
     .button-ink { color: #fff; background: var(--ink); border-color: var(--ink); }
 
     .container {
-      max-width: 1200px;
+      max-width: 1320px;
       margin: 0 auto;
-      padding: 40px 28px;
+      padding: 28px 24px 44px;
     }
 
     .page-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 32px;
+      margin-bottom: 20px;
     }
 
     .page-header h1 {
       font-family: 'Noto Serif SC', serif;
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
 
     .page-header p {
@@ -104,14 +104,14 @@
 
     .project-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 14px;
     }
 
     .project-filter {
       display: inline-flex;
       gap: 4px;
-      margin: -12px 0 24px;
+      margin: 0 0 16px;
       padding: 4px;
       border: 1px solid var(--line);
       border-radius: 9px;
@@ -134,10 +134,13 @@
     .project-card {
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 24px;
+      border-radius: 10px;
+      padding: 16px;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      position: relative;
     }
 
     .project-card:hover {
@@ -145,19 +148,57 @@
       box-shadow: var(--shadow);
     }
 
+    .project-card:focus-within {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(37, 95, 77, .13), var(--shadow);
+    }
+
+    .project-cover {
+      aspect-ratio: 16 / 7;
+      margin-bottom: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--paper-deep);
+    }
+
+    .project-cover img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .project-cover.is-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      color: var(--muted);
+      background:
+        radial-gradient(circle at 22% 25%, rgba(37, 95, 77, .12) 0 2px, transparent 3px),
+        linear-gradient(135deg, #f0eee6, #e5eadf);
+      font-size: 12px;
+    }
+
+    .project-cover.is-placeholder::before { content: '◌'; font-size: 20px; color: var(--green); }
+
     .project-card h3 {
       font-family: 'Noto Serif SC', serif;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 600;
-      margin-bottom: 8px;
+      line-height: 1.35;
+      margin-bottom: 5px;
+      overflow-wrap: anywhere;
+      min-height: 49px;
     }
 
     .project-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .project-status {
       flex: 0 0 auto;
-      padding: 4px 8px;
+      padding: 3px 7px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
     }
     .project-status.active { color: var(--green); background: var(--green-soft); }
@@ -165,10 +206,12 @@
 
     .project-meta {
       display: flex;
-      gap: 16px;
-      margin-bottom: 12px;
-      font-size: 13px;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
       color: var(--muted);
+      min-height: 18px;
     }
 
     .project-meta span {
@@ -179,15 +222,20 @@
 
     .project-desc {
       color: var(--muted);
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 16px;
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 10px;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      min-height: 36px;
     }
 
     .project-stats {
       display: flex;
-      gap: 20px;
-      padding-top: 16px;
+      gap: 16px;
+      padding-top: 10px;
       border-top: 1px solid var(--line);
       font-size: 12px;
       color: var(--muted);
@@ -200,7 +248,7 @@
     }
 
     .stat-value {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 600;
       color: var(--green);
     }
@@ -387,18 +435,20 @@
     }
 
     .project-card-actions {
-      margin-top: 12px;
+      margin-top: 10px;
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
 
     .project-card-actions button {
       flex: 1;
-      padding: 8px 12px;
+      min-height: 32px;
+      padding: 5px 7px;
       border: 1px solid var(--line);
       border-radius: 6px;
-      font-size: 13px;
+      font-size: 12px;
       background: white;
+      white-space: nowrap;
     }
 
     .project-card-actions button:hover {
@@ -406,12 +456,56 @@
       border-color: var(--green);
     }
 
+    /* 项目卡默认只展示封面与名称；详情作为悬浮浮层展开，不占用列表高度。 */
+    @media (hover: hover) and (pointer: fine) {
+      .project-card { z-index: 0; }
+
+      .project-card-details {
+        position: absolute;
+        z-index: 2;
+        top: calc(100% - 10px);
+        right: -1px;
+        left: -1px;
+        padding: 12px 16px 16px;
+        border: 1px solid var(--line);
+        border-top: 0;
+        border-radius: 0 0 10px 10px;
+        background: var(--surface);
+        box-shadow: 0 14px 24px rgba(46, 54, 42, .12);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(4px);
+        pointer-events: none;
+        transition: opacity .16s ease, transform .16s ease, visibility .16s step-end;
+      }
+
+      .project-card:hover { z-index: 3; }
+
+      .project-card:hover .project-card-details,
+      .project-card:focus-within .project-card-details {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        pointer-events: auto;
+        transition: opacity .16s ease, transform .16s ease;
+      }
+    }
+
     @media (max-width: 760px) {
       .topbar { height: 62px; padding: 0 14px; }
       .container { padding: 24px 16px; }
       .page-header h1 { font-size: 22px; }
-      .project-grid { grid-template-columns: 1fr; }
+      .project-grid { grid-template-columns: 1fr; gap: 12px; }
+      .project-card { padding: 16px; }
       .form-row { grid-template-columns: 1fr; }
+    }
+
+    @media (min-width: 900px) {
+      .project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (min-width: 1240px) {
+      .project-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -588,44 +682,74 @@
         <div class="project-grid">
           ${filteredProjects.map(p => `
             <div class="project-card" data-id="${p.id}">
+              ${(() => {
+                const coverImage = p.coverImage || p.data?.hikingRoute?.coverImage || p.data?.blocks?.find(block => block.image)?.image;
+                return coverImage
+                  ? `<div class="project-cover"><img src="${escapeHtml(coverImage)}" alt="${escapeHtml(p.name)} 的封面" loading="lazy" /></div>`
+                  : '<div class="project-cover is-placeholder" aria-label="暂无项目封面">等待旅程开始</div>';
+              })()}
               <div class="project-title-row"><h3>${escapeHtml(p.name)}</h3><span class="project-status ${p.status === 'completed' ? 'completed' : 'active'}">${p.status === 'completed' ? '已完成' : '进行中'}</span></div>
-              <div class="project-meta">
-                ${p.mode === 'hiking' ? '<span>🥾 徒步路线</span>' : ''}
-                ${p.destination ? `<span>📍 ${escapeHtml(p.destination)}</span>` : ''}
-                ${p.startDate ? `<span>📅 ${p.startDate} ~ ${p.endDate || '...'}</span>` : ''}
-              </div>
-              ${p.description ? `<div class="project-desc">${escapeHtml(p.description)}</div>` : ''}
-              <div class="project-stats">
-                <div class="stat">
-                  <span class="stat-value">${p.data?.blocks?.length || 0}</span>
-                  <span>旅行块</span>
+              <div class="project-card-details">
+                <div class="project-meta">
+                  ${p.mode === 'hiking' ? '<span>🥾 徒步路线</span>' : ''}
+                  ${p.destination ? `<span>📍 ${escapeHtml(p.destination)}</span>` : ''}
+                  ${p.startDate ? `<span>📅 ${p.startDate} ~ ${p.endDate || '...'}</span>` : ''}
                 </div>
-                <div class="stat">
-                  <span class="stat-value">${p.members?.length || 0}</span>
-                  <span>成员</span>
+                <div class="project-desc${p.description ? '' : ' is-empty'}">${p.description ? escapeHtml(p.description) : ''}</div>
+                <div class="project-stats">
+                  <div class="stat">
+                    <span class="stat-value">${p.data?.blocks?.length || 0}</span>
+                    <span>旅行块</span>
+                  </div>
+                  <div class="stat">
+                    <span class="stat-value">${p.members?.length || 0}</span>
+                    <span>成员</span>
+                  </div>
+                  <div class="stat">
+                    <span class="stat-value">${p.mode === 'hiking' ? (p.data?.hikingRoute?.start && p.data?.hikingRoute?.end ? 2 : 0) : (p.data?.timeline?.length || 0)}</span>
+                    <span>${p.mode === 'hiking' ? '路线点' : '行程项'}</span>
+                  </div>
                 </div>
-                <div class="stat">
-                  <span class="stat-value">${p.mode === 'hiking' ? (p.data?.hikingRoute?.start && p.data?.hikingRoute?.end ? 2 : 0) : (p.data?.timeline?.length || 0)}</span>
-                  <span>${p.mode === 'hiking' ? '路线点' : '行程项'}</span>
+                <div class="project-card-actions">
+                  <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
+                  <button class="toggle-project-status-btn" data-id="${p.id}" data-revision="${p.revision || 1}" data-status="${p.status || 'active'}">${p.status === 'completed' ? '重新开启' : '标记完成'}</button>
+                  <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
                 </div>
-              </div>
-              <div class="project-card-actions">
-                <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
-                <button class="toggle-project-status-btn" data-id="${p.id}" data-revision="${p.revision || 1}" data-status="${p.status || 'active'}">${p.status === 'completed' ? '重新开启' : '标记完成'}</button>
-                <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
               </div>
             </div>
           `).join('')}
         </div>
       `;
+
+      const enterProject = (projectId) => {
+        localStorage.setItem('currentProjectId', projectId);
+        window.location.href = 'index.html';
+      };
+
+      // 卡片主体与“进入项目”按钮保持一致；卡片内的管理操作则各自处理，避免误跳转。
+      document.querySelectorAll('.project-card').forEach(card => {
+        card.addEventListener('click', (event) => {
+          if (event.target.closest('button, a, input, select, textarea, label')) return;
+          enterProject(card.dataset.id);
+        });
+      });
+
+      document.querySelectorAll('.project-cover img').forEach(image => {
+        image.addEventListener('error', () => {
+          const cover = image.closest('.project-cover');
+          if (!cover) return;
+          image.remove();
+          cover.classList.add('is-placeholder');
+          cover.setAttribute('aria-label', '暂无项目封面');
+          cover.textContent = '等待旅程开始';
+        }, { once: true });
+      });
       
       // 绑定进入项目按钮
       document.querySelectorAll('.enter-project-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const projectId = btn.dataset.id;
-          localStorage.setItem('currentProjectId', projectId);
-          window.location.href = 'index.html';
+          enterProject(btn.dataset.id);
         });
       });
       
