@@ -9,6 +9,20 @@ import { openLocationPicker } from './src/location-picker.js?v=20260909-geocodin
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
+
+// 弹窗关闭缓动：重写 close() 让所有 dialog 自动带退出动画
+const _origDialogClose = HTMLDialogElement.prototype.close;
+HTMLDialogElement.prototype.close = function(returnValue) {
+  if (this.classList.contains('closing')) {
+    _origDialogClose.call(this, returnValue);
+    return;
+  }
+  this.classList.add('closing');
+  this.addEventListener('animationend', () => {
+    _origDialogClose.call(this, returnValue);
+  }, { once: true });
+};
+
 let currentProject = null;
 let autosaveEnabled = false;
 let pendingConflictSnapshot = null;
