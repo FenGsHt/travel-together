@@ -49,6 +49,8 @@ jobs:
             FLASK_SECRET_KEY=${{ secrets.FLASK_SECRET_KEY }}
             SITE_ACCESS_TOKEN=${{ secrets.SITE_ACCESS_TOKEN }}
             FLASK_PORT=5000
+            AMAP_SECURITY_JS_CODE=${{ secrets.AMAP_SECURITY_JS_CODE }}
+            AMAP_JS_API_KEY=${{ secrets.AMAP_JS_API_KEY }}
             ENVEOF
 
       - name: Install Backend Dependencies

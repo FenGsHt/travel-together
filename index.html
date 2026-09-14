@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f5f1e8" />
   <title>一起去滇南 · 协作行程</title>
-  <!-- 自动部署测试 -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -346,17 +345,18 @@
   </template>
 
   <script>
-    // 安全密钥由后端 /_AMapService 代理添加，前端不保存明文。
+    // 安全密钥与 API Key 均由后端 /_AMapService 代理添加，前端不保存明文。
     const amapServiceOrigin = ['localhost', '127.0.0.1'].includes(window.location.hostname)
       ? 'http://localhost:5001'
       : window.location.origin;
     window._AMapSecurityConfig = {
       serviceHost: `${amapServiceOrigin}/_AMapService`
     };
+    // 通过后端代理加载高德 SDK，API Key 不在前端源码暴露。
+    const amapSdk = document.createElement('script');
+    amapSdk.src = `${amapServiceOrigin}/_AMapService/maps?v=2.0&plugin=AMap.PlaceSearch,AMap.Driving,AMap.Walking`;
+    document.head.appendChild(amapSdk);
   </script>
-  <script src="https://webapi.amap.com/maps?v=2.0&key=5f6a87ea770765a1a5fe984ea045f8ea&plugin=AMap.PlaceSearch,AMap.Driving,AMap.Walking"></script>
   <script type="module" src="app.js?v=20260912-hiking-document-r4"></script>
 </body>
 </html>
-<!-- 1788710385 -->
-<!-- deploy 1788711146 -->

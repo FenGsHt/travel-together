@@ -611,7 +611,7 @@ export function createTripStore() {
       }
       
       const comment = {
-        id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         timelineItemId,
         content: content.trim(),
         author: { id: author.id, name: author.name },

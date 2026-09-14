@@ -50,6 +50,7 @@ SITE_ACCESS_USER_NAME = os.getenv('SITE_ACCESS_USER_NAME', '协作访客')
 # AI API Key（从环境变量读取）
 AI_API_KEY = os.getenv('AI_API_KEY', '')
 AMAP_SECURITY_JS_CODE = os.getenv('AMAP_SECURITY_JS_CODE', '')
+AMAP_JS_API_KEY = os.getenv('AMAP_JS_API_KEY', '')
 
 # 所有外部 AI 整理项目时都会读取的统一研究规则。它不是展示文案，
 # 而是要求 AI 在落库前先检索、核验并交代来源的系统提示。
@@ -275,6 +276,27 @@ def proxy_amap_service(service_path):
             return Response(body, status=upstream_response.status, content_type=content_type)
     except (URLError, TimeoutError):
         return jsonify({'error': '地图服务暂时不可用'}), 502
+
+
+@app.route('/_AMapService/maps', methods=['GET'])
+def proxy_amap_sdk():
+    """代理高德地图 JS SDK 加载，API Key 从服务端环境变量注入，不在前端源码暴露。"""
+    if not AMAP_JS_API_KEY:
+        return Response('/* 地图 API Key 未配置 */', status=503, content_type='application/javascript')
+
+    params = request.args.to_dict(flat=True)
+    params['key'] = AMAP_JS_API_KEY
+    query_string = urlencode(params)
+    upstream_url = f'https://webapi.amap.com/maps?{query_string}'
+    try:
+        upstream_request = UrlRequest(upstream_url, headers={
+            'User-Agent': 'travel-together-local/1.0',
+        })
+        with urlopen(upstream_request, timeout=15) as upstream_response:
+            body = upstream_response.read()
+            return Response(body, status=200, content_type='application/javascript; charset=utf-8')
+    except (URLError, TimeoutError):
+        return Response('/* 地图 SDK 加载失败 */', status=502, content_type='application/javascript')
 
 
 @app.route('/api/geocoding/search', methods=['GET'])
