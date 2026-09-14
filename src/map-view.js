@@ -1,6 +1,8 @@
 // 高德地图视图模块
 // 提供地图初始化、标记管理、视图切换等功能
 
+import { escapeHtml } from './utils.js';
+
 let map = null;
 let markers = [];
 let infoWindows = [];
@@ -355,10 +357,4 @@ export function getMap() {
  */
 export function getAMap() {
   return AMap;
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

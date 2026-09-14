@@ -6,6 +6,7 @@ import { findTimeConflicts } from './src/timeline-conflicts.js';
 import { realtimeClient } from './src/realtime-client.js';
 import { initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap } from './src/map-view.js?v=20260911-hiking-routes';
 import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
+import { escapeHtml } from './src/utils.js';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
@@ -974,6 +975,34 @@ function createTimelineCard(item) {
     openTimelineItemDetail(item.id);
   });
 
+  // 双击名称进入内联编辑
+  card.querySelector('.name')?.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    const nameEl = e.currentTarget;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = item.name;
+    input.className = 'name-edit-input';
+    input.style.cssText = 'width:100%;border:0;border-bottom:2px solid var(--green);background:transparent;outline:none;font:inherit;font-size:inherit;font-weight:700;color:var(--ink);padding:0;';
+    nameEl.replaceChildren(input);
+    input.focus();
+    input.select();
+    const finish = (save) => {
+      if (save) {
+        const newName = input.value.trim();
+        if (newName && newName !== item.name) {
+          store.editTimelineItem({ timelineId: item.id, name: newName, editor });
+        }
+      }
+      render();
+    };
+    input.addEventListener('blur', () => finish(true), { once: true });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); input.removeEventListener('blur', finish); finish(false); }
+    });
+  });
+
   card.querySelector('.timeline-delete-btn')?.addEventListener('click', () => {
     const confirmed = confirm(`删除「${item.name}」这个行程卡片？\n灵感库会保留该地点，关联的路线、投票和评论会一并清理。`);
     if (!confirmed) return;
@@ -1202,15 +1231,6 @@ function bindPollVoteHandlers(root) {
       }
     });
   });
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 const travelCategoryLabels = {

@@ -549,13 +549,15 @@ dialog.closing {
 .drop-hint {
   width: max-content;
   margin: 24px auto 0;
-  padding: 7px 11px;
-  color: #8a959e;
-  border: 1px dashed #cbd2d8;
+  padding: 8px 14px;
+  color: var(--green);
+  border: 1.5px dashed #b8ccbd;
   border-radius: 999px;
-  background: rgba(255,255,255,.72);
-  font-size: 11px;
+  background: rgba(255,255,255,.82);
+  font-size: 12px;
+  font-weight: 500;
 }
+.drop-hint-icon { display: inline-block; margin-right: 3px; font-size: 14px; line-height: 1; vertical-align: -1px; }
 .day-column.is-empty { min-height: 94px; }
 .day-column.is-empty .drop-zone { min-height: 70px; }
 .day-column.is-empty .drop-hint { margin-top: 10px; opacity: .72; }

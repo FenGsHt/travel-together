@@ -608,6 +608,8 @@
   </dialog>
 
   <script type="module">
+    import { escapeHtml } from './src/utils.js';
+
     // API 基础地址
     const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:5001'
@@ -818,13 +820,7 @@
         });
       });
     }
-    
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-    
+
     document.getElementById('create-btn').addEventListener('click', () => {
       createDialog.showModal();
     });
