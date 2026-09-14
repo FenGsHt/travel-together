@@ -815,6 +815,31 @@ dialog.closing {
 .quick-add-popover .qa-block-name { font-size: 12px; }
 .quick-add-popover .qa-scroll { max-height: 160px; overflow-y: auto; }
 
+/* 起止点地图预览 */
+.hiking-endpoint-map {
+  display: block;
+  width: 100%;
+  max-width: 120px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+}
+
+/* 选中态 */
+.timeline-card.selected {
+  box-shadow: 0 0 0 2px var(--green), 0 4px 12px rgba(35,43,50,.08);
+}
+
+/* 拖拽删除视觉反馈 */
+.timeline-card.dragging-to-delete {
+  opacity: 0.5;
+  transform: scale(0.92);
+  box-shadow: 0 0 0 3px var(--terracotta), 0 8px 24px rgba(183,82,53,.25);
+  transition: opacity 150ms, transform 150ms, box-shadow 150ms;
+}
+
 /* 封面图片预览 */
 .hiking-cover-preview {
   margin-top: 6px;

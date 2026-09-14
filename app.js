@@ -37,7 +37,6 @@ function showToast(message, icon = '✓') {
   toast.className = 'toast-item';
   toast.innerHTML = `<span class="toast-icon">${icon}</span>${escapeHtml(message)}`;
   container.appendChild(toast);
-  // 触发 reflow 以启动动画
   toast.offsetHeight;
   toast.classList.add('toast-visible');
   clearTimeout(toastTimer);
@@ -45,6 +44,12 @@ function showToast(message, icon = '✓') {
     toast.classList.remove('toast-visible');
     setTimeout(() => toast.remove(), 200);
   }, 2000);
+}
+
+function removeFromTimeline(timelineId) {
+  store.removeTimelineItem({ timelineId, editor });
+  showToast('行程已删除', '');
+  render();
 }
 
 let currentProject = null;
@@ -290,6 +295,64 @@ async function init() {
 
 // 启动初始化
 init();
+
+// #6 键盘快捷键
+document.addEventListener('keydown', (event) => {
+  // 忽略输入框内的按键
+  if (event.target.closest('input, textarea, select')) return;
+  // 忽略 dialog 打开时的按键
+  if (document.querySelector('dialog[open]')) return;
+
+  const key = event.key.toLowerCase();
+
+  // Delete/Backspace: 删除选中的卡片
+  if ((key === 'delete' || key === 'backspace') && selectedTimelineId) {
+    event.preventDefault();
+    removeFromTimeline(selectedTimelineId);
+    selectedTimelineId = null;
+    return;
+  }
+
+  // N: 新建行程
+  if (key === 'n' && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+    const firstDay = days[0]?.id || 1;
+    openAddSlotDialog(firstDay);
+    return;
+  }
+
+  // M: 切换地图/时间线
+  if (key === 'm' && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+    const nextView = currentView === 'timeline' ? 'map' : 'timeline';
+    switchView(nextView);
+    return;
+  }
+
+  // Escape: 关闭气泡/取消选中
+  if (key === 'escape') {
+    closeQuickAddPopover();
+    if (selectedTimelineId) {
+      selectedTimelineId = null;
+      document.querySelectorAll('.timeline-card.selected').forEach(c => c.classList.remove('selected'));
+    }
+    return;
+  }
+
+  // 1-5: 滚动到对应天数
+  if (/^[1-5]$/.test(key) && !event.ctrlKey && !event.metaKey) {
+    const dayNum = parseInt(key);
+    const dayEl = document.getElementById(`day-${dayNum}`);
+    if (dayEl) {
+      event.preventDefault();
+      dayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return;
+  }
+});
+
+// 选中态管理
+let selectedTimelineId = null;
 
 // 初始化实时协作
 function initRealtime() {
@@ -767,6 +830,7 @@ function bindCanvasCardDrag(card, item) {
   let timeDragState = null;
   const TIME_DRAG_THRESHOLD = 12; // px before switching to time drag
   const PX_PER_15MIN = 20;
+  const DELETE_ZONE_THRESHOLD = 60; // px below viewport bottom to trigger delete
 
   card.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.target.closest('button, input, textarea, a, [role="button"]')) return;
@@ -825,15 +889,31 @@ function bindCanvasCardDrag(card, item) {
     card.style.setProperty('--canvas-x', `${nextX}px`);
     card.style.setProperty('--canvas-y', `${nextY}px`);
     scheduleRouteRender();
+
+    // 拖拽删除：检查是否拖到视口底部以下
+    const viewport = document.getElementById('board-viewport');
+    if (viewport) {
+      const vpRect = viewport.getBoundingClientRect();
+      const cardBottom = event.clientY + 20; // 卡片底部估算
+      const inDeleteZone = cardBottom > vpRect.bottom - DELETE_ZONE_THRESHOLD;
+      card.classList.toggle('dragging-to-delete', inDeleteZone);
+      dragState.inDeleteZone = inDeleteZone;
+    }
   });
 
   const finishDrag = (event, { cancelled = false } = {}) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
     const { moved, startX, startY, timeMode, origTime } = dragState;
     dragState = null;
-    card.classList.remove('canvas-moving');
+    card.classList.remove('canvas-moving', 'dragging-to-delete');
     hideTimeDragIndicator(card);
     if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
+
+    // 拖拽删除：在删除区域松开
+    if (dragState?.inDeleteZone) {
+      removeFromTimeline(item.id);
+      return;
+    }
 
     if (timeMode) {
       // 时间调整模式：取浮标当前显示的时间，吸附到 5 分钟
@@ -990,7 +1070,15 @@ function createTimelineCard(item) {
   const openDetailsFromCard = event => {
     if (card.dataset.justDragged === 'true') return;
     if (event.target.closest('button, input, textarea, select, a, [role="button"]')) return;
-    openTimelineItemDetail(item.id);
+    // 单击选中，双击打开详情
+    if (selectedTimelineId === item.id) {
+      openTimelineItemDetail(item.id);
+    } else {
+      // 取消其他选中
+      document.querySelectorAll('.timeline-card.selected').forEach(c => c.classList.remove('selected'));
+      selectedTimelineId = item.id;
+      card.classList.add('selected');
+    }
   };
   card.addEventListener('click', openDetailsFromCard);
   card.addEventListener('keydown', event => {
@@ -1460,7 +1548,10 @@ function createHikingRoutePanel() {
     const value = point
       ? `${point.name || label} · ${Number(point.lat).toFixed(4)}, ${Number(point.lng).toFixed(4)}`
       : `选择${label}`;
-    return `<button class="hiking-endpoint" type="button" data-hiking-endpoint="${kind}"><span>${kind === 'start' ? '①' : '②'} ${label}</span><b>${escapeHtml(value)}</b></button>`;
+    const mapPreview = point?.lat && point?.lng
+      ? `<img class="hiking-endpoint-map" src="https://restapi.amap.com/v3/staticmap?location=${point.lng},${point.lat}&zoom=15&size=120*80&markers=mid,0xFF4444,:${point.lng},${point.lat}&key=5f6a87ea770765a1a5fe984ea045f8ea" alt="${escapeHtml(label)}位置预览" loading="lazy" onerror="this.style.display='none'" />`
+      : '';
+    return `<button class="hiking-endpoint" type="button" data-hiking-endpoint="${kind}"><span>${kind === 'start' ? '①' : '②'} ${label}</span><b>${escapeHtml(value)}</b>${mapPreview}</button>`;
   };
 
   // 图片画廊
