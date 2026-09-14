@@ -740,6 +740,10 @@ function bindCanvasCardDrag(card, item) {
   card.querySelector('img')?.setAttribute('draggable', 'false');
 
   let dragState = null;
+  let timeDragState = null;
+  const TIME_DRAG_THRESHOLD = 12; // px before switching to time drag
+  const PX_PER_15MIN = 20;
+
   card.addEventListener('pointerdown', event => {
     if (event.button !== 0 || event.target.closest('button, input, textarea, a, [role="button"]')) return;
     const startX = Number(card.dataset.canvasX) || 0;
@@ -755,6 +759,9 @@ function bindCanvasCardDrag(card, item) {
       baseLeft: (cardRect.left - timelineRect.left) / canvasZoom - startX,
       baseTop: (cardRect.top - timelineRect.top) / canvasZoom - startY,
       moved: false,
+      timeMode: false,
+      timeDragStartY: event.clientY,
+      origTime: item.time,
     };
     card.setPointerCapture(event.pointerId);
     card.classList.add('canvas-moving');
@@ -765,6 +772,25 @@ function bindCanvasCardDrag(card, item) {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
     const deltaX = (event.clientX - dragState.clientX) / canvasZoom;
     const deltaY = (event.clientY - dragState.clientY) / canvasZoom;
+
+    // 纵向超过阈值 → 切换为调时间模式
+    if (!dragState.timeMode && Math.abs(deltaY) > TIME_DRAG_THRESHOLD && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
+      dragState.timeMode = true;
+      dragState.timeDragStartY = event.clientY;
+      card.classList.remove('canvas-moving');
+      // 显示时间浮标
+      showTimeDragIndicator(card, item);
+      return;
+    }
+
+    if (dragState.timeMode) {
+      const pixelDelta = event.clientY - dragState.timeDragStartY;
+      const minutesDelta = Math.round((-pixelDelta / PX_PER_15MIN) * 15);
+      const currentDragTime = adjustTime(dragState.origTime, minutesDelta);
+      updateTimeDragIndicator(card, currentDragTime);
+      return;
+    }
+
     const maxX = timeline.clientWidth - card.offsetWidth - 16 - dragState.baseLeft;
     const maxY = timeline.clientHeight - card.offsetHeight - 16 - dragState.baseTop;
     const nextX = Math.min(maxX, Math.max(16 - dragState.baseLeft, dragState.startX + deltaX));
@@ -779,10 +805,23 @@ function bindCanvasCardDrag(card, item) {
 
   const finishDrag = (event, { cancelled = false } = {}) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const { moved, startX, startY } = dragState;
+    const { moved, startX, startY, timeMode, origTime } = dragState;
     dragState = null;
     card.classList.remove('canvas-moving');
+    hideTimeDragIndicator(card);
     if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
+
+    if (timeMode) {
+      // 时间调整模式：取浮标当前显示的时间，吸附到 5 分钟
+      const displayTime = timeDragIndicator?.textContent || origTime;
+      const finalTime = snapTimeTo5Min(displayTime);
+      if (finalTime !== origTime) {
+        store.editTimelineItem({ timelineId: item.id, time: finalTime, editor });
+      }
+      render();
+      return;
+    }
+
     if (cancelled) {
       card.dataset.canvasX = String(startX);
       card.dataset.canvasY = String(startY);
@@ -802,6 +841,40 @@ function bindCanvasCardDrag(card, item) {
   };
   card.addEventListener('pointerup', finishDrag);
   card.addEventListener('pointercancel', event => finishDrag(event, { cancelled: true }));
+}
+
+// --- 时间拖拽浮标 ---
+let timeDragIndicator = null;
+function showTimeDragIndicator(card, item) {
+  hideTimeDragIndicator(card);
+  timeDragIndicator = document.createElement('div');
+  timeDragIndicator.className = 'time-drag-indicator';
+  timeDragIndicator.textContent = item.time;
+  card.appendChild(timeDragIndicator);
+}
+function updateTimeDragIndicator(card, time) {
+  if (timeDragIndicator) timeDragIndicator.textContent = time;
+}
+function hideTimeDragIndicator(card) {
+  if (timeDragIndicator) {
+    timeDragIndicator.remove();
+    timeDragIndicator = null;
+  }
+}
+function adjustTime(time, minutesDelta) {
+  const [h, m] = time.split(':').map(Number);
+  let totalMin = h * 60 + m + minutesDelta;
+  totalMin = Math.max(0, Math.min(23 * 60 + 59, totalMin));
+  const nh = Math.floor(totalMin / 60);
+  const nm = totalMin % 60;
+  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+}
+function snapTimeTo5Min(time) {
+  const [h, m] = time.split(':').map(Number);
+  const snapped = Math.round(m / 5) * 5;
+  const nh = snapped >= 60 ? h + 1 : h;
+  const nm = snapped % 60;
+  return `${String(Math.min(23, nh)).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
 }
 
 function createTimelineCard(item) {
