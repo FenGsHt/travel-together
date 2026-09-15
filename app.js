@@ -1782,14 +1782,6 @@ function createHikingRoutePanel() {
     ? `<div class="hiking-image-gallery">${allImages.map((src, i) => `<img class="hiking-gallery-img" src="${escapeHtml(src)}" alt="路线图片${i + 1}" />`).join('')}</div>`
     : '';
 
-  // 出行提示分点显示
-  const arrivalTipHtml = route.arrivalTip
-    ? route.arrivalTip.split('\n').filter(s => s.trim()).map(s => `<li>${escapeHtml(s.trim())}</li>`).join('')
-    : '';
-  const arrivalTipDisplay = arrivalTipHtml
-    ? `<ul class="hiking-arrival-list">${arrivalTipHtml}</ul>`
-    : '<small class="hiking-empty-tip">暂无出行提示</small>';
-
   panel.innerHTML = `
     <div class="hiking-route-hero">
       <div class="hiking-route-cover">${cover}</div>
@@ -1813,7 +1805,6 @@ function createHikingRoutePanel() {
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
     <div class="hiking-arrival-section">
       <span class="hiking-arrival-title">出行提示（公交／自驾／停车）</span>
-      ${arrivalTipDisplay}
       <div class="hiking-arrival-editor" id="hiking-arrival-editor">
         ${(route.arrivalTip || '').split('\n').filter(s => s.trim()).map((tip, i) => `
           <div class="hiking-arrival-item" data-index="${i}">
