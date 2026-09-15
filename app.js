@@ -1762,9 +1762,6 @@ function createHikingRoutePanel() {
   const safetyMessage = safety.hazards || safety.exits
     ? `${safety.hazards ? `已标记 ${safety.hazards} 处危险点` : '暂无危险点'}${safety.exits ? ` · ${safety.exits} 个撤离点` : ''}`
     : '暂未标记危险点或撤离点；请在出发前补充。';
-  const cover = route.coverImage
-    ? `<img class="hiking-cover-image" src="${escapeHtml(route.coverImage)}" alt="${escapeHtml(route.name || '徒步路线封面')}" />`
-    : '<span class="hiking-cover-placeholder">🥾<small>等待路线封面</small></span>';
   const endpoint = (kind, label) => {
     const point = route[kind];
     const value = point
@@ -1783,22 +1780,12 @@ function createHikingRoutePanel() {
     : '';
 
   panel.innerHTML = `
-    <div class="hiking-route-hero">
-      <div class="hiking-route-cover">${cover}</div>
-      <div class="hiking-route-heading">
-        <div><p class="eyebrow">徒步路线</p><h3>只记录这一整段路</h3></div>
-        <div class="hiking-route-actions">
-          <button class="button button-ghost hiking-share-button" type="button" title="生成路线分享卡片">分享</button>
-          <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
-        </div>
-      </div>
-    </div>
     ${imageGallery}
-    <p class="hiking-route-tip">不需要按第几天拆分。选择起终点后，会在地图中生成可查看的徒步轨迹。</p>
-    <div class="hiking-route-tools" aria-label="GPX 路线工具">
+    <div class="hiking-route-tools" aria-label="路线工具">
+      <button class="button button-ghost hiking-share-button" type="button" title="生成路线分享卡片">分享</button>
+      <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
       <label class="button button-ghost hiking-gpx-import">导入 GPX<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
       <button class="button button-ghost" type="button" id="hiking-gpx-export" ${route.trackPoints?.length >= 2 ? '' : 'disabled title="请先导入含轨迹点的 GPX"'}>导出 GPX</button>
-      <button class="button hiking-share-card-button" type="button" id="hiking-share-card">生成分享图</button>
       <small>${route.trackPoints?.length ? `已载入 ${route.trackPoints.length} 个轨迹点` : '导入轨迹后可保留路线与海拔数据'}</small>
     </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
@@ -1913,12 +1900,6 @@ function createHikingRoutePanel() {
       const index = Number(button.dataset.checkpointIndex);
       updateHikingRoute({ checkpoints: (hikingRoute.checkpoints || []).filter((_, itemIndex) => itemIndex !== index) }, { rerender: true });
     });
-  });
-  panel.querySelector('.hiking-cover-image')?.addEventListener('error', (event) => {
-    const coverElement = event.currentTarget.closest('.hiking-route-cover');
-    if (!coverElement) return;
-    coverElement.classList.add('is-unavailable');
-    event.currentTarget.remove();
   });
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
   panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
