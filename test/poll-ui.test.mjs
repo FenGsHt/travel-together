@@ -155,7 +155,7 @@ test('the board exposes zoom controls and free-position pointer dragging', async
   assert.match(app, /class="move-day-btn"/);
   assert.match(html, /id="slot-block-id"/);
   assert.match(app, /const selectedBlock = blocks\.find\(block => block\.id === blockSelect\.value\)/);
-  assert.match(app, /store\.scheduleBlock\(\{ blockId, day: day\.id, time, editor \}\)/);
+  assert.match(app, /store\.scheduleBlock\(\{ blockId, day: dayId, time, editor \}\)/);
 });
 
 test('hiking projects use one route instead of a day-by-day itinerary', async () => {
@@ -169,7 +169,7 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(app, /function isHikingProject/);
   assert.match(app, /function createHikingRoutePanel/);
   assert.match(app, /if \(isHikingProject\(\)\) \{\n    timeline\.append\(createHikingRoutePanel\(\)\)/);
-  assert.match(app, /addHikingRoute\(hikingRoute\?\.start, hikingRoute\?\.end\)/);
+  assert.match(app, /addHikingRoute\([\s\S]*hikingRoute\?\.start,[\s\S]*hikingRoute\?\.end,[\s\S]*hikingRoute\?\.trackPoints,[\s\S]*hikingRoute\?\.checkpoints,/);
   assert.match(mapView, /export function getWalkingRoute/);
   assert.match(mapView, /export function addHikingRoute/);
   assert.match(styles, /\.hiking-route-panel/);
@@ -187,6 +187,20 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(backend, /AI_RESEARCH_SYSTEM_PROMPT/);
   assert.match(backend, /\/api\/ai\/projects\/<project_id>\/hiking-route/);
   assert.match(backend, /徒步路线至少需要两条检索来源/);
+});
+
+test('hiking routes import and export GPX tracks with an elevation profile', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
+
+  assert.match(app, /importHikingGpx/);
+  assert.match(app, /routeToGpx\(hikingRoute\)/);
+  assert.match(app, /hiking-elevation-chart/);
+  assert.match(app, /hiking-checkpoints-section/);
+  assert.match(app, /downloadHikingShareCard/);
+  assert.match(app, /id="hiking-share-card"/);
+  assert.match(mapView, /GPX 轨迹优先于地图规划/);
+  assert.match(mapView, /importedPath\.length >= 2/);
 });
 
 test('projects can filter journeys by completion and update their status', async () => {

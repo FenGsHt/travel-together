@@ -7,6 +7,9 @@ import { realtimeClient } from './src/realtime-client.js';
 import { initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap } from './src/map-view.js?v=20260911-hiking-routes';
 import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
 import { escapeHtml } from './src/utils.js';
+import { elevationStats, parseGpx, routeToGpx } from './src/gpx.js?v=20260915-gpx';
+import { createHikingShareCardSvg } from './src/hiking-share-card.js?v=20260915-share-card';
+import { HIKING_CHECKPOINT_TYPES, checkpointSafetySummary, checkpointType } from './src/hiking-checkpoints.js?v=20260915-safety-points';
 
 // 获取当前项目
 const currentProjectId = localStorage.getItem('currentProjectId');
@@ -50,6 +53,86 @@ function removeFromTimeline(timelineId) {
   store.removeTimelineItem({ timelineId, editor });
   showToast('行程已删除', '');
   render();
+}
+
+// #13 移动端长按操作菜单
+function openMobileActionMenu(timelineId, name, touchY) {
+  let sheet = document.getElementById('mobile-action-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'mobile-action-sheet';
+    sheet.innerHTML = `
+      <div class="mobile-action-backdrop"></div>
+      <div class="mobile-action-content">
+        <div class="mobile-action-handle"></div>
+        <h3 class="mobile-action-title"></h3>
+        <div class="mobile-action-list"></div>
+      </div>
+    `;
+    document.body.appendChild(sheet);
+    sheet.querySelector('.mobile-action-backdrop').addEventListener('click', closeMobileActionMenu);
+  }
+  sheet.querySelector('.mobile-action-title').textContent = name;
+  const list = sheet.querySelector('.mobile-action-list');
+  const actions = [
+    { label: '查看详情', icon: '📋', action: () => { closeMobileActionMenu(); openTimelineItemDetail(timelineId); } },
+    { label: '选择位置', icon: '📍', action: () => { closeMobileActionMenu(); /* trigger location picker */ } },
+    { label: '备选分叉', icon: '', action: () => { closeMobileActionMenu(); /* trigger branch */ } },
+    { label: '添加评论', icon: '💬', action: () => { closeMobileActionMenu(); } },
+    { label: '删除行程', icon: '', action: () => { closeMobileActionMenu(); removeFromTimeline(timelineId); }, danger: true },
+  ];
+  list.innerHTML = actions.map(a =>
+    `<button class="mobile-action-item${a.danger ? ' is-danger' : ''}" type="button"><span class="mobile-action-icon">${a.icon}</span>${a.label}</button>`
+  ).join('');
+  list.querySelectorAll('.mobile-action-item').forEach((btn, i) => {
+    btn.addEventListener('click', actions[i].action);
+  });
+  sheet.classList.add('mobile-action-visible');
+}
+
+function closeMobileActionMenu() {
+  const sheet = document.getElementById('mobile-action-sheet');
+  if (sheet) sheet.classList.remove('mobile-action-visible');
+}
+
+// #25 路线分享卡片
+function openShareCard(route) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'share-card-dialog';
+  const startName = route.start?.name || '未设置起点';
+  const endName = route.end?.name || '未设置终点';
+  const stats = [
+    route.difficulty ? `难度 ${route.difficulty}` : '',
+    route.distance ? `距离 ${route.distance}` : '',
+    route.duration ? `用时 ${route.duration}` : '',
+  ].filter(Boolean).join(' · ');
+  dialog.innerHTML = `
+    <button class="dialog-close" type="button" aria-label="关闭">×</button>
+    <div class="share-card">
+      <div class="share-card-header">
+        <span class="share-card-badge">🥾 徒步路线</span>
+        <h2>${escapeHtml(route.name || '未命名路线')}</h2>
+      </div>
+      <div class="share-card-route">
+        <span class="share-card-point start">起点 · ${escapeHtml(startName)}</span>
+        <span class="share-card-arrow">→</span>
+        <span class="share-card-point end">终点 · ${escapeHtml(endName)}</span>
+      </div>
+      ${stats ? `<div class="share-card-stats">${stats}</div>` : ''}
+      ${route.summary ? `<p class="share-card-summary">${escapeHtml(route.summary)}</p>` : ''}
+      <div class="share-card-footer">
+        <span>一起去滇南 · travel-together</span>
+      </div>
+    </div>
+    <div class="share-card-actions">
+      <button class="button button-ghost share-card-close" type="button">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
+  dialog.querySelector('.share-card-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.showModal();
 }
 
 let currentProject = null;
@@ -143,6 +226,8 @@ function createEmptyHikingRoute() {
     duration: '',
     start: null,
     end: null,
+    trackPoints: [],
+    checkpoints: [],
   };
 }
 
@@ -1297,6 +1382,17 @@ function createTimelineCard(item) {
   
   bindPollVoteHandlers(card);
   
+  // #13 移动端长按弹出操作菜单
+  let longPressTimer = null;
+  card.addEventListener('touchstart', (e) => {
+    if (e.target.closest('button, input')) return;
+    longPressTimer = setTimeout(() => {
+      openMobileActionMenu(item.id, item.name, e.touches[0].clientY);
+    }, 500);
+  }, { passive: true });
+  card.addEventListener('touchend', () => clearTimeout(longPressTimer));
+  card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+
   return card;
 }
 
@@ -1524,6 +1620,105 @@ function formatHikingDuration(duration) {
     : `${minutes} 分`;
 }
 
+function hikingPointLabel(point, fallback) {
+  return point?.name || fallback;
+}
+
+function elevationProfileHtml(trackPoints = []) {
+  const samples = trackPoints.filter(point => Number.isFinite(Number(point.elevation)));
+  const stats = elevationStats(samples);
+  if (!stats || samples.length < 2) {
+    return '<p class="hiking-profile-empty">导入含海拔数据的 GPX 后，会在这里显示海拔变化。</p>';
+  }
+  const width = 600;
+  const height = 112;
+  const padding = 8;
+  const span = Math.max(1, stats.max - stats.min);
+  const coordinates = samples.map((point, index) => {
+    const x = padding + (index / (samples.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - ((Number(point.elevation) - stats.min) / span)) * (height - padding * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const fill = `${padding},${height - padding} ${coordinates.join(' ')} ${width - padding},${height - padding}`;
+  return `
+    <div class="hiking-elevation-chart" role="img" aria-label="海拔最低 ${Math.round(stats.min)} 米，最高 ${Math.round(stats.max)} 米，累计爬升 ${Math.round(stats.ascent)} 米">
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="${fill}" class="hiking-elevation-fill"></polygon>
+        <polyline points="${coordinates.join(' ')}" class="hiking-elevation-line"></polyline>
+      </svg>
+      <div class="hiking-elevation-labels"><span>${Math.round(stats.min)} m</span><span>累计爬升 ${Math.round(stats.ascent)} m</span><span>${Math.round(stats.max)} m</span></div>
+    </div>`;
+}
+
+function downloadHikingGpx() {
+  try {
+    const xml = routeToGpx(hikingRoute);
+    const url = URL.createObjectURL(new Blob([xml], { type: 'application/gpx+xml;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(hikingRoute.name || '徒步路线').replace(/[\\/:*?"<>|]/g, '_')}.gpx`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('GPX 已导出，可导入户外 App', '↗');
+  } catch (error) {
+    showToast(error.message || '暂无可导出的 GPX 轨迹', '!');
+  }
+}
+
+function downloadHikingShareCard() {
+  try {
+    const svg = createHikingShareCardSvg(hikingRoute);
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(hikingRoute.name || '徒步路线').replace(/[\\/:*?"<>|]/g, '_')}-分享卡.svg`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast('路线分享图已生成', '↗');
+  } catch (error) {
+    showToast(error.message || '暂时无法生成分享图', '!');
+  }
+}
+
+async function importHikingGpx(file) {
+  if (!file) return;
+  try {
+    const parsed = parseGpx(await file.text());
+    const start = parsed.trackPoints[0];
+    const end = parsed.trackPoints.at(-1);
+    const checkpoints = parsed.waypoints.map((point, index) => ({
+      name: hikingPointLabel(point, `打卡点 ${index + 1}`), lat: point.lat, lng: point.lng,
+      type: checkpointType(point.type).id,
+    }));
+    hikingRoute = {
+      ...createEmptyHikingRoute(),
+      ...hikingRoute,
+      name: parsed.name || hikingRoute.name || file.name.replace(/\.gpx$/i, ''),
+      distance: formatHikingDistance(parsed.distance),
+      start: { name: hikingPointLabel(start, '徒步起点'), lat: start.lat, lng: start.lng },
+      end: { name: hikingPointLabel(end, '徒步终点'), lat: end.lat, lng: end.lng },
+      trackPoints: parsed.trackPoints,
+      checkpoints,
+    };
+    render();
+    showToast(`已导入 ${parsed.trackPoints.length} 个轨迹点`, '✓');
+  } catch (error) {
+    showToast(error.message || 'GPX 导入失败', '!');
+  }
+}
+
+async function addHikingCheckpoint() {
+  const lastPoint = hikingRoute?.checkpoints?.at(-1) || hikingRoute?.start;
+  const selected = await openLocationPicker(lastPoint?.lat ?? null, lastPoint?.lng ?? null);
+  if (!selected) return;
+  updateHikingRoute({
+    checkpoints: [...(hikingRoute.checkpoints || []), {
+      name: selected.name || `打卡点 ${(hikingRoute.checkpoints || []).length + 1}`,
+      address: selected.address || '', lat: selected.lat, lng: selected.lng, type: 'view',
+    }],
+  }, { rerender: true });
+}
+
 function updateHikingRoute(patch, { rerender = false } = {}) {
   hikingRoute = { ...createEmptyHikingRoute(), ...hikingRoute, ...patch };
   if (rerender) {
@@ -1563,6 +1758,10 @@ function createHikingRoutePanel() {
   const panel = document.createElement('section');
   panel.className = 'hiking-route-panel';
   const route = { ...createEmptyHikingRoute(), ...hikingRoute };
+  const safety = checkpointSafetySummary(route.checkpoints);
+  const safetyMessage = safety.hazards || safety.exits
+    ? `${safety.hazards ? `已标记 ${safety.hazards} 处危险点` : '暂无危险点'}${safety.exits ? ` · ${safety.exits} 个撤离点` : ''}`
+    : '暂未标记危险点或撤离点；请在出发前补充。';
   const cover = route.coverImage
     ? `<img class="hiking-cover-image" src="${escapeHtml(route.coverImage)}" alt="${escapeHtml(route.name || '徒步路线封面')}" />`
     : '<span class="hiking-cover-placeholder">🥾<small>等待路线封面</small></span>';
@@ -1596,11 +1795,20 @@ function createHikingRoutePanel() {
       <div class="hiking-route-cover">${cover}</div>
       <div class="hiking-route-heading">
         <div><p class="eyebrow">徒步路线</p><h3>只记录这一整段路</h3></div>
-        <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
+        <div class="hiking-route-actions">
+          <button class="button button-ghost hiking-share-button" type="button" title="生成路线分享卡片">分享</button>
+          <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
+        </div>
       </div>
     </div>
     ${imageGallery}
     <p class="hiking-route-tip">不需要按第几天拆分。选择起终点后，会在地图中生成可查看的徒步轨迹。</p>
+    <div class="hiking-route-tools" aria-label="GPX 路线工具">
+      <label class="button button-ghost hiking-gpx-import">导入 GPX<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
+      <button class="button button-ghost" type="button" id="hiking-gpx-export" ${route.trackPoints?.length >= 2 ? '' : 'disabled title="请先导入含轨迹点的 GPX"'}>导出 GPX</button>
+      <button class="button hiking-share-card-button" type="button" id="hiking-share-card">生成分享图</button>
+      <small>${route.trackPoints?.length ? `已载入 ${route.trackPoints.length} 个轨迹点` : '导入轨迹后可保留路线与海拔数据'}</small>
+    </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
     <div class="hiking-arrival-section">
@@ -1620,6 +1828,18 @@ function createHikingRoutePanel() {
     <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /><div class="hiking-cover-preview" id="hiking-cover-preview">${route.coverImage ? `<img src="${escapeHtml(route.coverImage)}" alt="封面预览" />` : ''}</div></label>
     <label class="hiking-field"><span>更多图片链接（每行一个）</span><textarea data-hiking-field="imagesRaw" rows="3" placeholder="每行粘贴一个图片链接">${(route.images || []).join('\n')}</textarea></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
+    <section class="hiking-profile-section">
+      <div class="hiking-section-heading"><span>海拔剖面</span><small>${route.trackPoints?.length ? '来自 GPX 轨迹' : '等待 GPX 数据'}</small></div>
+      ${elevationProfileHtml(route.trackPoints)}
+    </section>
+    <section class="hiking-checkpoints-section">
+      <div class="hiking-section-heading"><span>途中打卡点</span><button class="button button-ghost" type="button" id="hiking-checkpoint-add">＋ 添加</button></div>
+      <p class="hiking-risk-summary ${safety.hazards ? 'has-hazard' : ''}"><b>安全提示</b><span>${escapeHtml(safetyMessage)}</span>${safety.water ? `<em>补水点 ${safety.water}</em>` : ''}</p>
+      <ol class="hiking-checkpoint-list">${(route.checkpoints || []).map((point, index) => {
+        const type = checkpointType(point.type);
+        return `<li class="hiking-checkpoint-item type-${type.id}"><i aria-hidden="true">${type.icon}</i><span>${escapeHtml(hikingPointLabel(point, `打卡点 ${index + 1}`))}</span><select class="hiking-checkpoint-type" data-checkpoint-index="${index}" aria-label="${escapeHtml(hikingPointLabel(point, `打卡点 ${index + 1}`))}类型">${HIKING_CHECKPOINT_TYPES.map(option => `<option value="${option.id}" ${option.id === type.id ? 'selected' : ''}>${option.icon} ${option.label}</option>`).join('')}</select><button type="button" class="hiking-checkpoint-remove" data-checkpoint-index="${index}" aria-label="删除${escapeHtml(hikingPointLabel(point, `打卡点 ${index + 1}`))}">×</button></li>`;
+      }).join('') || '<li class="hiking-checkpoint-empty">可添加观景台、补给点、岔路或撤离点</li>'}</ol>
+    </section>
     <div class="hiking-facts">
       <label class="hiking-field"><span>难度</span><input data-hiking-field="difficulty" value="${escapeHtml(route.difficulty)}" placeholder="如：中等（约 2633 级台阶）" /></label>
       <label class="hiking-field"><span>全程距离</span><input data-hiking-field="distance" value="${escapeHtml(route.distance)}" placeholder="如：约 3.5 km（官方资料）" /></label>
@@ -1686,6 +1906,23 @@ function createHikingRoutePanel() {
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
   });
+  panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
+  panel.querySelector('#hiking-gpx-export')?.addEventListener('click', downloadHikingGpx);
+  panel.querySelector('#hiking-share-card')?.addEventListener('click', downloadHikingShareCard);
+  panel.querySelector('#hiking-checkpoint-add')?.addEventListener('click', addHikingCheckpoint);
+  panel.querySelectorAll('.hiking-checkpoint-type').forEach(select => {
+    select.addEventListener('change', () => {
+      const index = Number(select.dataset.checkpointIndex);
+      updateHikingRoute({ checkpoints: (hikingRoute.checkpoints || []).map((point, pointIndex) =>
+        pointIndex === index ? { ...point, type: checkpointType(select.value).id } : point) }, { rerender: true });
+    });
+  });
+  panel.querySelectorAll('.hiking-checkpoint-remove').forEach(button => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.checkpointIndex);
+      updateHikingRoute({ checkpoints: (hikingRoute.checkpoints || []).filter((_, itemIndex) => itemIndex !== index) }, { rerender: true });
+    });
+  });
   panel.querySelector('.hiking-cover-image')?.addEventListener('error', (event) => {
     const coverElement = event.currentTarget.closest('.hiking-route-cover');
     if (!coverElement) return;
@@ -1693,6 +1930,7 @@ function createHikingRoutePanel() {
     event.currentTarget.remove();
   });
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
+  panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
   return panel;
 }
 
@@ -2058,7 +2296,10 @@ function mapSignature(items, connections) {
 }
 
 function hikingMapSignature(route) {
-  return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng]
+  const points = [...(route?.trackPoints || []), ...(route?.checkpoints || [])]
+    .map(point => [point.lat, point.lng, point.name].join(','))
+    .join('~');
+  return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng, points]
     .map(value => String(value ?? ''))
     .join('|');
 }
@@ -2075,7 +2316,12 @@ function renderMapView({ force = false } = {}) {
       initMap('map-canvas');
       mapViewInitialized = true;
     }
-    addHikingRoute(hikingRoute?.start, hikingRoute?.end);
+    addHikingRoute(
+      hikingRoute?.start,
+      hikingRoute?.end,
+      hikingRoute?.trackPoints,
+      hikingRoute?.checkpoints,
+    );
     mapViewSignature = nextSignature;
     return;
   }

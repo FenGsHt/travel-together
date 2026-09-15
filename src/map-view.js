@@ -164,8 +164,14 @@ export function getWalkingRoute(source, target) {
   return request;
 }
 
-/** 在地图上呈现徒步项目的一整条起终点路线。 */
-export function addHikingRoute(start, end, onClick) {
+/** 在地图上呈现徒步项目的一整条起终点路线。GPX 轨迹优先于地图规划。 */
+export function addHikingRoute(start, end, trackPoints = [], checkpoints = [], onClick) {
+  // 保持旧调用 addHikingRoute(start, end, onClick) 兼容。
+  if (typeof trackPoints === 'function') {
+    onClick = trackPoints;
+    trackPoints = [];
+    checkpoints = [];
+  }
   if (!map || !AMap) return;
   clearMarkers();
   clearRouteLines();
@@ -173,12 +179,18 @@ export function addHikingRoute(start, end, onClick) {
 
   const points = [
     { ...start, id: 'hiking-start', name: `起点 · ${start.name || '未命名'}` },
+    ...checkpoints.filter(hasCoordinates).map((point, index) => ({
+      ...point, id: `hiking-checkpoint-${index}`, name: `${({ view: '观景', water: '补水', junction: '岔路', hazard: '危险', exit: '撤离' }[point.type] || '打卡点')} · ${point.name || index + 1}`,
+    })),
     { ...end, id: 'hiking-end', name: `终点 · ${end.name || '未命名'}` },
   ];
   addMarkers(points, onClick);
+  const importedPath = trackPoints
+    .filter(hasCoordinates)
+    .map(point => new AMap.LngLat(point.lng, point.lat));
 
   const line = new AMap.Polyline({
-    path: points.map(point => new AMap.LngLat(point.lng, point.lat)),
+    path: importedPath.length >= 2 ? importedPath : points.map(point => new AMap.LngLat(point.lng, point.lat)),
     strokeColor: '#255f4d',
     strokeOpacity: 0.82,
     strokeWeight: 5,
@@ -189,6 +201,7 @@ export function addHikingRoute(start, end, onClick) {
   });
   line.setMap(map);
   routeLines.push(line);
+  if (importedPath.length >= 2) return;
   getWalkingRoute(start, end).then((route) => {
     if (route?.path?.length && routeLines.includes(line)) line.setPath(route.path);
   });
