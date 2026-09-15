@@ -2241,7 +2241,7 @@ function renderActivity() {
         : event.type === 'ai.draft.imported'
           ? '审核并导入了 AI 整理的旅行块'
           : '更新了行程备注';
-    item.innerHTML = `<strong>${escapeHtml(event.editor.name)}</strong> ${action}<br><span>刚刚</span>`;
+    item.innerHTML = `<strong>${escapeHtml(event.editor?.name || '系统')}</strong> ${action}<br><span>刚刚</span>`;
     activityList.append(item);
   });
 }
