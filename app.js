@@ -1721,7 +1721,7 @@ function createHikingRoutePanel() {
       <div class="hiking-arrival-editor" id="hiking-arrival-editor">
         ${(route.arrivalTip || '').split('\n').filter(s => s.trim()).map((tip, i) => `
           <div class="hiking-arrival-item" data-index="${i}">
-            <input type="text" value="${escapeHtml(tip.trim())}" class="hiking-arrival-input" placeholder="输入一条提示…" />
+            <textarea class="hiking-arrival-input" placeholder="输入一条提示…" rows="1">${escapeHtml(tip.trim())}</textarea>
             <button class="hiking-arrival-remove" data-index="${i}" type="button" title="删除此条">×</button>
           </div>
         `).join('')}
@@ -1783,6 +1783,9 @@ function createHikingRoutePanel() {
 
   arrivalEditor?.addEventListener('input', (e) => {
     if (e.target.classList.contains('hiking-arrival-input')) {
+      // 自动增高
+      e.target.style.height = 'auto';
+      e.target.style.height = e.target.scrollHeight + 'px';
       syncArrivalTips();
     }
   });
@@ -1798,9 +1801,21 @@ function createHikingRoutePanel() {
     if (!arrivalEditor) return;
     const item = document.createElement('div');
     item.className = 'hiking-arrival-item';
-    item.innerHTML = `<input type="text" class="hiking-arrival-input" placeholder="输入一条提示…" /><button class="hiking-arrival-remove" type="button" title="删除此条">×</button>`;
+    item.innerHTML = `<textarea class="hiking-arrival-input" placeholder="输入一条提示…" rows="1"></textarea><button class="hiking-arrival-remove" type="button" title="删除此条">×</button>`;
     arrivalEditor.appendChild(item);
-    item.querySelector('input').focus();
+    const ta = item.querySelector('textarea');
+    ta.focus();
+    // 自动增高
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+  });
+
+  // 初始化已有 textarea 高度
+  arrivalEditor?.querySelectorAll('.hiking-arrival-input').forEach(ta => {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
   });
 
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {

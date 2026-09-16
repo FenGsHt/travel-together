@@ -917,13 +917,19 @@ dialog.closing {
 }
 .hiking-arrival-input {
   flex: 1;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   background: #fff;
   outline: none;
   font-family: inherit;
+  resize: none;
+  overflow: hidden;
+  min-height: 40px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .hiking-arrival-input:focus {
   border-color: var(--green);
