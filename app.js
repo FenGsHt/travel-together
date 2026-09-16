@@ -228,6 +228,7 @@ function createEmptyHikingRoute() {
     end: null,
     checkpoints: [],
     trackPoints: [],
+    segments: [],
   };
 }
 
@@ -792,7 +793,12 @@ function setCanvasZoom(value, { preserveCenter = true } = {}) {
     centerY = (viewport.scrollTop + viewport.clientHeight / 2) / previousZoom;
   }
 
-  timeline.style.zoom = String(canvasZoom);
+  // 使用 transform: scale() 替代非标准的 zoom 属性
+  timeline.style.transform = `scale(${canvasZoom})`;
+  timeline.style.transformOrigin = '0 0';
+  // 调整容器尺寸以匹配缩放后的内容，确保滚动区域正确
+  timeline.style.width = `${1100 / canvasZoom}px`;
+  timeline.style.height = `${2000 / canvasZoom}px`;
   if (zoomValue) zoomValue.textContent = `${Math.round(canvasZoom * 100)}%`;
   localStorage.setItem(`travel-canvas-zoom-${currentProjectId || 'default'}`, String(canvasZoom));
 
@@ -1764,6 +1770,23 @@ function createHikingRoutePanel() {
     <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /><div class="hiking-cover-preview" id="hiking-cover-preview">${route.coverImage ? `<img src="${escapeHtml(route.coverImage)}" alt="封面预览" />` : ''}</div></label>
     <label class="hiking-field"><span>更多图片链接（每行一个）</span><textarea data-hiking-field="imagesRaw" rows="3" placeholder="每行粘贴一个图片链接">${(route.images || []).join('\n')}</textarea></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
+    <section class="hiking-segments-section">
+      <div class="hiking-section-heading"><span>分段路线</span><button class="button button-ghost" type="button" id="hiking-segment-add">＋ 添加分段</button></div>
+      <div class="hiking-segments-list">${(route.segments || []).map((seg, i) => `
+        <div class="hiking-segment-card" data-segment-index="${i}">
+          <div class="hiking-segment-header">
+            <span class="hiking-segment-number">${i + 1}</span>
+            <input class="hiking-segment-name" value="${escapeHtml(seg.name || '')}" placeholder="路段名称（如：下院→半山亭）" />
+            <button class="hiking-segment-remove" data-segment-index="${i}" type="button">×</button>
+          </div>
+          <div class="hiking-segment-fields">
+            <input class="hiking-segment-distance" value="${escapeHtml(seg.distance || '')}" placeholder="距离（如：1.2 km）" />
+            <input class="hiking-segment-duration" value="${escapeHtml(seg.duration || '')}" placeholder="用时（如：25 分钟）" />
+            <input class="hiking-segment-note" value="${escapeHtml(seg.note || '')}" placeholder="备注（路况、补给等）" />
+          </div>
+        </div>
+      `).join('')}${(route.segments || []).length === 0 ? '<p class="hiking-segments-empty">将整条路线按关键节点拆分，便于分段导航和离线核对</p>' : ''}</div>
+    </section>
     <section class="hiking-checkpoints-section">
       <div class="hiking-section-heading"><span>途中打卡点</span><button class="button button-ghost" type="button" id="hiking-checkpoint-add">＋ 添加</button></div>
       <p class="hiking-risk-summary ${safety.hazards ? 'has-hazard' : ''}"><b>安全提示</b><span>${escapeHtml(safetyMessage)}</span>${safety.water ? `<em>补水点 ${safety.water}</em>` : ''}</p>
@@ -1871,6 +1894,34 @@ function createHikingRoutePanel() {
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
   panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
   panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
+
+  // 分段路线事件处理
+  panel.querySelector('#hiking-segment-add')?.addEventListener('click', () => {
+    const segments = [...(hikingRoute.segments || []), { name: '', distance: '', duration: '', note: '' }];
+    updateHikingRoute({ segments }, { rerender: true });
+  });
+  panel.querySelectorAll('.hiking-segment-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.segmentIndex);
+      const segments = (hikingRoute.segments || []).filter((_, i) => i !== index);
+      updateHikingRoute({ segments }, { rerender: true });
+    });
+  });
+  panel.querySelectorAll('.hiking-segment-name, .hiking-segment-distance, .hiking-segment-duration, .hiking-segment-note').forEach(input => {
+    input.addEventListener('change', () => {
+      const card = input.closest('.hiking-segment-card');
+      const index = Number(card.dataset.segmentIndex);
+      const segments = [...(hikingRoute.segments || [])];
+      segments[index] = {
+        name: card.querySelector('.hiking-segment-name').value,
+        distance: card.querySelector('.hiking-segment-distance').value,
+        duration: card.querySelector('.hiking-segment-duration').value,
+        note: card.querySelector('.hiking-segment-note').value,
+      };
+      updateHikingRoute({ segments });
+    });
+  });
+
   return panel;
 }
 
@@ -2754,6 +2805,18 @@ document.querySelector('#add-block').addEventListener('click', () => {
   document.getElementById('add-block-form').reset();
   document.getElementById('image-preview').innerHTML = '';
   document.getElementById('add-block-dialog').showModal();
+});
+
+// #14 移动端底部快捷添加按钮
+document.querySelector('#mobile-fab')?.addEventListener('click', () => {
+  if (isHikingProject()) {
+    // 徒步路线：打开添加打卡点
+    pickHikingEndpoint('start');
+  } else {
+    // 行程模式：打开第一个天的 add-slot 对话框
+    const firstDay = days[0]?.id || 1;
+    openAddSlotDialog(firstDay);
+  }
 });
 
 document.querySelector('#add-block-form').addEventListener('submit', async (e) => {
