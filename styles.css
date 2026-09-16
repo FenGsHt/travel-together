@@ -903,6 +903,16 @@ dialog.closing {
 .quick-add-popover .qa-block-name { font-size: 12px; }
 .quick-add-popover .qa-scroll { max-height: 160px; overflow-y: auto; }
 
+/* GPX 导入行 */
+.hiking-gpx-import-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.hiking-gpx-import-btn { cursor: pointer; }
+.hiking-gpx-info { font-size: 12px; color: var(--muted); }
+
 /* 出行提示分点编辑器 */
 .hiking-arrival-editor {
   display: flex;
