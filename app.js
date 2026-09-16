@@ -7,7 +7,6 @@ import { realtimeClient } from './src/realtime-client.js';
 import { initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap } from './src/map-view.js?v=20260911-hiking-routes';
 import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
 import { escapeHtml } from './src/utils.js';
-import { elevationStats, parseGpx, routeToGpx } from './src/gpx.js?v=20260915-gpx';
 import { createHikingShareCardSvg } from './src/hiking-share-card.js?v=20260915-share-card';
 import { HIKING_CHECKPOINT_TYPES, checkpointSafetySummary, checkpointType } from './src/hiking-checkpoints.js?v=20260915-safety-points';
 
@@ -226,7 +225,6 @@ function createEmptyHikingRoute() {
     duration: '',
     start: null,
     end: null,
-    trackPoints: [],
     checkpoints: [],
   };
 }
@@ -1624,46 +1622,7 @@ function hikingPointLabel(point, fallback) {
   return point?.name || fallback;
 }
 
-function elevationProfileHtml(trackPoints = []) {
-  const samples = trackPoints.filter(point => Number.isFinite(Number(point.elevation)));
-  const stats = elevationStats(samples);
-  if (!stats || samples.length < 2) {
-    return '<p class="hiking-profile-empty">导入含海拔数据的 GPX 后，会在这里显示海拔变化。</p>';
-  }
-  const width = 600;
-  const height = 112;
-  const padding = 8;
-  const span = Math.max(1, stats.max - stats.min);
-  const coordinates = samples.map((point, index) => {
-    const x = padding + (index / (samples.length - 1)) * (width - padding * 2);
-    const y = padding + (1 - ((Number(point.elevation) - stats.min) / span)) * (height - padding * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const fill = `${padding},${height - padding} ${coordinates.join(' ')} ${width - padding},${height - padding}`;
-  return `
-    <div class="hiking-elevation-chart" role="img" aria-label="海拔最低 ${Math.round(stats.min)} 米，最高 ${Math.round(stats.max)} 米，累计爬升 ${Math.round(stats.ascent)} 米">
-      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
-        <polygon points="${fill}" class="hiking-elevation-fill"></polygon>
-        <polyline points="${coordinates.join(' ')}" class="hiking-elevation-line"></polyline>
-      </svg>
-      <div class="hiking-elevation-labels"><span>${Math.round(stats.min)} m</span><span>累计爬升 ${Math.round(stats.ascent)} m</span><span>${Math.round(stats.max)} m</span></div>
-    </div>`;
-}
 
-function downloadHikingGpx() {
-  try {
-    const xml = routeToGpx(hikingRoute);
-    const url = URL.createObjectURL(new Blob([xml], { type: 'application/gpx+xml;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${(hikingRoute.name || '徒步路线').replace(/[\\/:*?"<>|]/g, '_')}.gpx`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast('GPX 已导出，可导入户外 App', '↗');
-  } catch (error) {
-    showToast(error.message || '暂无可导出的 GPX 轨迹', '!');
-  }
-}
 
 function downloadHikingShareCard() {
   try {
@@ -1680,32 +1639,6 @@ function downloadHikingShareCard() {
   }
 }
 
-async function importHikingGpx(file) {
-  if (!file) return;
-  try {
-    const parsed = parseGpx(await file.text());
-    const start = parsed.trackPoints[0];
-    const end = parsed.trackPoints.at(-1);
-    const checkpoints = parsed.waypoints.map((point, index) => ({
-      name: hikingPointLabel(point, `打卡点 ${index + 1}`), lat: point.lat, lng: point.lng,
-      type: checkpointType(point.type).id,
-    }));
-    hikingRoute = {
-      ...createEmptyHikingRoute(),
-      ...hikingRoute,
-      name: parsed.name || hikingRoute.name || file.name.replace(/\.gpx$/i, ''),
-      distance: formatHikingDistance(parsed.distance),
-      start: { name: hikingPointLabel(start, '徒步起点'), lat: start.lat, lng: start.lng },
-      end: { name: hikingPointLabel(end, '徒步终点'), lat: end.lat, lng: end.lng },
-      trackPoints: parsed.trackPoints,
-      checkpoints,
-    };
-    render();
-    showToast(`已导入 ${parsed.trackPoints.length} 个轨迹点`, '✓');
-  } catch (error) {
-    showToast(error.message || 'GPX 导入失败', '!');
-  }
-}
 
 async function addHikingCheckpoint() {
   const lastPoint = hikingRoute?.checkpoints?.at(-1) || hikingRoute?.start;
@@ -1781,13 +1714,6 @@ function createHikingRoutePanel() {
 
   panel.innerHTML = `
     ${imageGallery}
-    <div class="hiking-route-tools" aria-label="路线工具">
-      <button class="button button-ghost hiking-share-button" type="button" title="生成路线分享卡片">分享</button>
-      <button class="button button-ink hiking-map-button" type="button">查看完整路线</button>
-      <label class="button button-ghost hiking-gpx-import">导入 GPX<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
-      <button class="button button-ghost" type="button" id="hiking-gpx-export" ${route.trackPoints?.length >= 2 ? '' : 'disabled title="请先导入含轨迹点的 GPX"'}>导出 GPX</button>
-      <small>${route.trackPoints?.length ? `已载入 ${route.trackPoints.length} 个轨迹点` : '导入轨迹后可保留路线与海拔数据'}</small>
-    </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
     <div class="hiking-arrival-section">
@@ -1806,10 +1732,6 @@ function createHikingRoutePanel() {
     <label class="hiking-field"><span>封面图片链接</span><input data-hiking-field="coverImage" value="${escapeHtml(route.coverImage)}" placeholder="AI 导入或粘贴图片链接" /><div class="hiking-cover-preview" id="hiking-cover-preview">${route.coverImage ? `<img src="${escapeHtml(route.coverImage)}" alt="封面预览" />` : ''}</div></label>
     <label class="hiking-field"><span>更多图片链接（每行一个）</span><textarea data-hiking-field="imagesRaw" rows="3" placeholder="每行粘贴一个图片链接">${(route.images || []).join('\n')}</textarea></label>
     <div class="hiking-endpoints">${endpoint('start', '起点')}${endpoint('end', '终点')}</div>
-    <section class="hiking-profile-section">
-      <div class="hiking-section-heading"><span>海拔剖面</span><small>${route.trackPoints?.length ? '来自 GPX 轨迹' : '等待 GPX 数据'}</small></div>
-      ${elevationProfileHtml(route.trackPoints)}
-    </section>
     <section class="hiking-checkpoints-section">
       <div class="hiking-section-heading"><span>途中打卡点</span><button class="button button-ghost" type="button" id="hiking-checkpoint-add">＋ 添加</button></div>
       <p class="hiking-risk-summary ${safety.hazards ? 'has-hazard' : ''}"><b>安全提示</b><span>${escapeHtml(safetyMessage)}</span>${safety.water ? `<em>补水点 ${safety.water}</em>` : ''}</p>
@@ -1884,8 +1806,6 @@ function createHikingRoutePanel() {
   panel.querySelectorAll('[data-hiking-endpoint]').forEach(button => {
     button.addEventListener('click', () => pickHikingEndpoint(button.dataset.hikingEndpoint));
   });
-  panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
-  panel.querySelector('#hiking-gpx-export')?.addEventListener('click', downloadHikingGpx);
   panel.querySelector('#hiking-share-card')?.addEventListener('click', downloadHikingShareCard);
   panel.querySelector('#hiking-checkpoint-add')?.addEventListener('click', addHikingCheckpoint);
   panel.querySelectorAll('.hiking-checkpoint-type').forEach(select => {
@@ -2268,7 +2188,7 @@ function mapSignature(items, connections) {
 }
 
 function hikingMapSignature(route) {
-  const points = [...(route?.trackPoints || []), ...(route?.checkpoints || [])]
+  const points = [...(route?.checkpoints || [])]
     .map(point => [point.lat, point.lng, point.name].join(','))
     .join('~');
   return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng, points]
@@ -2291,7 +2211,6 @@ function renderMapView({ force = false } = {}) {
     addHikingRoute(
       hikingRoute?.start,
       hikingRoute?.end,
-      hikingRoute?.trackPoints,
       hikingRoute?.checkpoints,
     );
     mapViewSignature = nextSignature;
