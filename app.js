@@ -174,7 +174,7 @@ function openOfflineRouteCard(route) {
 
 // #29 离线出行包：打包 GPX + 路线信息为 JSON 下载
 function downloadOfflinePackage(route) {
-  const package = {
+  const routePackage = {
     version: 1,
     generatedAt: new Date().toISOString(),
     route: {
@@ -200,7 +200,7 @@ function downloadOfflinePackage(route) {
       '路线文件：GPX 已下载到手机',
     ],
   };
-  const blob = new Blob([JSON.stringify(package, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(routePackage, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
