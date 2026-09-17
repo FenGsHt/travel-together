@@ -229,6 +229,8 @@ function createEmptyHikingRoute() {
     checkpoints: [],
     trackPoints: [],
     segments: [],
+    turnaround: null,
+    retreatTime: '',
   };
 }
 
@@ -1800,6 +1802,10 @@ function createHikingRoutePanel() {
       <label class="hiking-field"><span>全程距离</span><input data-hiking-field="distance" value="${escapeHtml(route.distance)}" placeholder="如：约 3.5 km（官方资料）" /></label>
       <label class="hiking-field"><span>预计用时</span><input data-hiking-field="duration" value="${escapeHtml(route.duration)}" placeholder="如：约 2-3 小时（建议预留）" /></label>
     </div>
+    <div class="hiking-safety-row">
+      <label class="hiking-field"><span>折返点</span><input data-hiking-field="turnaroundName" value="${escapeHtml(route.turnaround?.name || '')}" placeholder="如：白云顶观景台" /><small class="hiking-safety-hint">超过此点应考虑折返</small></label>
+      <label class="hiking-field"><span>最晚撤离时间</span><input type="time" data-hiking-field="retreatTime" value="${escapeHtml(route.retreatTime || '')}" /><small class="hiking-safety-hint">日落前 / 天黑前必须撤离</small></label>
+    </div>
   `;
   panel.querySelectorAll('[data-hiking-field]').forEach(field => {
     field.addEventListener('change', () => {
@@ -1807,6 +1813,8 @@ function createHikingRoutePanel() {
       let value = field.value;
       if (key === 'imagesRaw') {
         updateHikingRoute({ images: value.split('\n').map(s => s.trim()).filter(Boolean) });
+      } else if (key === 'turnaroundName') {
+        updateHikingRoute({ turnaround: { ...(hikingRoute.turnaround || {}), name: value } });
       } else {
         updateHikingRoute({ [key]: value });
       }
@@ -2644,6 +2652,42 @@ function renderRouteLines() {
   });
 }
 
+// #10 路线预览实时数据徽章
+let routePreviewBadge = null;
+function updateRoutePreviewBadge(targetCard, sourceCard) {
+  // 移除旧徽章
+  if (routePreviewBadge) {
+    routePreviewBadge.remove();
+    routePreviewBadge = null;
+  }
+  if (!targetCard || !sourceCard) return;
+
+  const timeline = document.getElementById('timeline');
+  if (!timeline) return;
+
+  const sourceItem = store.snapshot().timeline.find(t => t.id === sourceCard.dataset.timelineId);
+  const targetItem = store.snapshot().timeline.find(t => t.id === targetCard.dataset.timelineId);
+  if (!sourceItem?.lat || !targetItem?.lat) return;
+
+  // 获取高德步行路线数据
+  getWalkingRoute(sourceItem, targetItem).then(route => {
+    if (!routePreviewBadge) return; // 已被移除
+    const dist = route ? formatHikingDistance(route.distance) : '—';
+    const dur = route ? formatHikingDuration(route.duration) : '—';
+    routePreviewBadge.textContent = `${dist} · ${dur}`;
+  });
+
+  // 创建徽章
+  routePreviewBadge = document.createElement('div');
+  routePreviewBadge.className = 'route-preview-badge';
+  routePreviewBadge.textContent = '计算中…';
+  const targetRect = targetCard.getBoundingClientRect();
+  const timelineRect = timeline.getBoundingClientRect();
+  routePreviewBadge.style.left = `${(targetRect.left - timelineRect.left) / canvasZoom + targetRect.width / (2 * canvasZoom)}px`;
+  routePreviewBadge.style.top = `${(targetRect.top - timelineRect.top) / canvasZoom - 28}px`;
+  timeline.appendChild(routePreviewBadge);
+}
+
 // 下一站连线拖拽：A → B 表示玩完 A 后接着去 B，可一对多。
 (function initRouteConnector() {
   const svg = document.getElementById('route-lines');
@@ -2702,12 +2746,17 @@ function renderRouteLines() {
     const distance = Math.hypot(x - startX, y - startY);
     const handleLength = Math.min(100, Math.max(10, distance * 0.38));
     previewPath.setAttribute('d', `M ${startX} ${startY} C ${startX + vector.x * handleLength} ${startY + vector.y * handleLength}, ${x} ${y}, ${x} ${y}`);
+
+    // #10 路线预览实时数据：悬停目标卡片时显示距离和时间
+    updateRoutePreviewBadge(hoveredTargetCard, sourceCard);
   });
 
   document.addEventListener('mouseup', (e) => {
     if (!dragging) return;
     dragging = false;
     previewPath?.remove();
+    // 清除路线预览徽章
+    if (routePreviewBadge) { routePreviewBadge.remove(); routePreviewBadge = null; }
     timeline.classList.remove('is-connecting');
     sourceCard?.querySelector(`[data-route-port="${sourcePort}"]`)?.classList.remove('is-active');
 

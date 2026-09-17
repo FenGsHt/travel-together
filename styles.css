@@ -1076,6 +1076,30 @@ dialog.closing {
   border: 1px solid var(--line);
 }
 
+/* #32 折返点与撤离时间 */
+.hiking-safety-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.hiking-safety-hint { display: block; font-size: 10px; color: var(--terracotta); margin-top: 3px; font-weight: 400; }
+
+/* #10 路线预览实时数据徽章 */
+.route-preview-badge {
+  position: absolute;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font: 600 11px 'DM Mono', monospace;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(37,95,77,.3);
+  pointer-events: none;
+  z-index: 30;
+  animation: badge-pop 120ms ease-out;
+}
+@keyframes badge-pop {
+  from { opacity: 0; transform: translateX(-50%) scale(0.8); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
 /* #13 移动端长按操作菜单 */
 #mobile-action-sheet {
   position: fixed;
