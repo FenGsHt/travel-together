@@ -172,6 +172,44 @@ function openOfflineRouteCard(route) {
   dialog.showModal();
 }
 
+// #29 离线出行包：打包 GPX + 路线信息为 JSON 下载
+function downloadOfflinePackage(route) {
+  const package = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    route: {
+      name: route.name || '未命名路线',
+      start: route.start,
+      end: route.end,
+      difficulty: route.difficulty,
+      distance: route.distance,
+      duration: route.duration,
+      retreatTime: route.retreatTime,
+      turnaround: route.turnaround,
+      segments: route.segments || [],
+      checkpoints: route.checkpoints || [],
+      arrivalTip: route.arrivalTip,
+      summary: route.summary,
+    },
+    trackPoints: route.trackPoints || [],
+    checklist: [
+      '装备：登山鞋、雨衣、头灯',
+      '补给：水 1.5L+、高能量零食',
+      '天气：出发前查看当日天气预报',
+      '紧急联系人：已告知同行人路线',
+      '路线文件：GPX 已下载到手机',
+    ],
+  };
+  const blob = new Blob([JSON.stringify(package, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(route.name || '徒步路线').replace(/[\\/:*?"<>|]/g, '_')}_出行包.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('离线出行包已下载', '📦');
+}
+
 let currentProject = null;
 let autosaveEnabled = false;
 let pendingConflictSnapshot = null;
@@ -1795,6 +1833,7 @@ function createHikingRoutePanel() {
     <div class="hiking-gpx-import-row">
       <label class="button button-ghost hiking-gpx-import-btn">导入 GPX 轨迹<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
       <button class="button button-ghost hiking-offline-card-btn" type="button">离线路线卡</button>
+      <button class="button button-ghost hiking-offline-package-btn" type="button">离线出行包</button>
       ${route.trackPoints?.length ? `<small class="hiking-gpx-info">已载入 ${route.trackPoints.length} 个轨迹点</small>` : '<small class="hiking-gpx-info">导入 GPX 后可显示路线轨迹与海拔数据</small>'}
     </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
@@ -1849,6 +1888,14 @@ function createHikingRoutePanel() {
       <label class="hiking-field"><span>折返点</span><input data-hiking-field="turnaroundName" value="${escapeHtml(route.turnaround?.name || '')}" placeholder="如：白云顶观景台" /><small class="hiking-safety-hint">超过此点应考虑折返</small></label>
       <label class="hiking-field"><span>最晚撤离时间</span><input type="time" data-hiking-field="retreatTime" value="${escapeHtml(route.retreatTime || '')}" /><small class="hiking-safety-hint">日落前 / 天黑前必须撤离</small></label>
     </div>
+    <section class="hiking-checklist-section">
+      <div class="hiking-section-heading"><span>出发检查清单</span><button class="button button-ghost" type="button" id="hiking-checklist-reset">重置</button></div>
+      <div class="hiking-checklist" id="hiking-checklist">
+        ${['装备：登山鞋、雨衣、头灯', '补给：水 1.5L+、高能量零食', '天气：出发前查看当日天气预报', '紧急联系人：已告知同行人路线', '路线文件：GPX 已下载到手机'].map((item, i) => `
+          <label class="hiking-checklist-item"><input type="checkbox" data-checklist-index="${i}" />${escapeHtml(item)}</label>
+        `).join('')}
+      </div>
+    </section>
   `;
   panel.querySelectorAll('[data-hiking-field]').forEach(field => {
     field.addEventListener('change', () => {
@@ -1945,6 +1992,7 @@ function createHikingRoutePanel() {
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
   panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
   panel.querySelector('.hiking-offline-card-btn')?.addEventListener('click', () => openOfflineRouteCard(route));
+  panel.querySelector('.hiking-offline-package-btn')?.addEventListener('click', () => downloadOfflinePackage(route));
   panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
 
   // 分段路线事件处理
@@ -1972,6 +2020,11 @@ function createHikingRoutePanel() {
       };
       updateHikingRoute({ segments });
     });
+  });
+
+  // #44 检查清单重置
+  panel.querySelector('#hiking-checklist-reset')?.addEventListener('click', () => {
+    panel.querySelectorAll('.hiking-checklist input[type="checkbox"]').forEach(cb => cb.checked = false);
   });
 
   return panel;

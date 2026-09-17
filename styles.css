@@ -1093,6 +1093,14 @@ dialog.closing {
 .offline-safety { margin-top: 12px; padding: 10px 12px; background: #fdf0ec; border-radius: 8px; font-size: 13px; color: var(--terracotta); }
 .offline-footer { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); text-align: center; }
 
+/* #44 出发检查清单 */
+.hiking-checklist-section { margin: 16px 0; }
+.hiking-checklist { display: flex; flex-direction: column; gap: 4px; }
+.hiking-checklist-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: background .15s; }
+.hiking-checklist-item:hover { background: var(--green-soft); }
+.hiking-checklist-item input[type="checkbox"] { accent-color: var(--green); width: 16px; height: 16px; }
+.hiking-checklist-item:has(input:checked) { background: var(--green-soft); text-decoration: line-through; color: var(--muted); }
+
 /* #32 折返点与撤离时间 */
 .hiking-safety-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
 .hiking-safety-hint { display: block; font-size: 10px; color: var(--terracotta); margin-top: 3px; font-weight: 400; }
