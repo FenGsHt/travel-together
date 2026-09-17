@@ -106,6 +106,43 @@ export function parseGpx(xml) {
   };
 }
 
+/** #28 GPX 健康检查：检测异常跳点、缺失海拔、超大文件 */
+export function gpxHealthCheck(trackPoints = []) {
+  const issues = [];
+  const total = trackPoints.length;
+  let hasElevation = 0;
+  let jumpCount = 0;
+  const JUMP_THRESHOLD_METERS = 500; // 相邻点距离超过 500m 视为跳点
+
+  for (let i = 0; i < total; i++) {
+    const p = trackPoints[i];
+    if (Number.isFinite(Number(p.elevation))) hasElevation++;
+    if (i > 0) {
+      const prev = trackPoints[i - 1];
+      const dist = distanceBetween(prev, p);
+      if (dist > JUMP_THRESHOLD_METERS) jumpCount++;
+    }
+  }
+
+  const elevationRatio = hasElevation / total;
+  const jumpRatio = jumpCount / Math.max(1, total - 1);
+
+  if (elevationRatio < 0.3) issues.push(`缺失海拔：仅 ${Math.round(elevationRatio * 100)}% 的点有海拔数据`);
+  if (jumpRatio > 0.1) issues.push(`异常跳点：${jumpCount} 处相邻点距离 >500m（共 ${total} 点）`);
+  if (total > 10000) issues.push(`文件过大：${total} 个轨迹点，建议简化后导入`);
+  if (total < 10) issues.push(`轨迹点过少：仅 ${total} 个点，可能不是完整轨迹`);
+
+  return {
+    totalPoints: total,
+    hasElevation: hasElevation,
+    elevationRatio: Math.round(elevationRatio * 100),
+    jumpCount,
+    jumpRatio: Math.round(jumpRatio * 100),
+    issues,
+    isHealthy: issues.length === 0,
+  };
+}
+
 /** Generate GPX 1.1 with the original track points and optional checkpoints. */
 export function routeToGpx(route = {}) {
   const points = (route.trackPoints || []).filter(point =>

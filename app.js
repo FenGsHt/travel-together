@@ -7,7 +7,7 @@ import { realtimeClient } from './src/realtime-client.js';
 import { initMap, addMarkers, addRouteLines, addHikingRoute, getDrivingRoute, getWalkingRoute, destroyMap } from './src/map-view.js?v=20260911-hiking-routes';
 import { openLocationPicker } from './src/location-picker.js?v=20260909-geocoding-fallback';
 import { escapeHtml } from './src/utils.js';
-import { parseGpx, trackDistance, elevationStats } from './src/gpx.js?v=20260916-gpx';
+import { parseGpx, trackDistance, elevationStats, gpxHealthCheck } from './src/gpx.js?v=20260917-health';
 import { createHikingShareCardSvg } from './src/hiking-share-card.js?v=20260915-share-card';
 import { HIKING_CHECKPOINT_TYPES, checkpointSafetySummary, checkpointType } from './src/hiking-checkpoints.js?v=20260915-safety-points';
 
@@ -131,6 +131,43 @@ function openShareCard(route) {
   document.body.appendChild(dialog);
   dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
   dialog.querySelector('.share-card-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.showModal();
+}
+
+// #40 离线路线卡（可打印）
+function openOfflineRouteCard(route) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'share-card-dialog';
+  const startName = route.start?.name || '未设置起点';
+  const endName = route.end?.name || '未设置终点';
+  const segments = (route.segments || []).map((s, i) =>
+    `<div class="offline-segment"><span class="offline-seg-num">${i + 1}</span><span class="offline-seg-name">${escapeHtml(s.name || `路段 ${i + 1}`)}</span><span class="offline-seg-info">${escapeHtml(s.distance || '')}${s.duration ? ' · ' + escapeHtml(s.duration) : ''}</span></div>`
+  ).join('');
+  const arrivalTips = (route.arrivalTip || '').split('\n').filter(s => s.trim()).map(s => `<li>${escapeHtml(s.trim())}</li>`).join('');
+
+  dialog.innerHTML = `
+    <button class="dialog-close" type="button" aria-label="关闭">×</button>
+    <div class="offline-route-card">
+      <div class="offline-header">
+        <h2>🥾 ${escapeHtml(route.name || '徒步路线')}</h2>
+        <div class="offline-route-line"><span class="offline-start">起点 · ${escapeHtml(startName)}</span><span class="offline-arrow">→</span><span class="offline-end">终点 · ${escapeHtml(endName)}</span></div>
+        <div class="offline-stats">${escapeHtml(route.difficulty || '')}${route.distance ? ' · ' + escapeHtml(route.distance) : ''}${route.duration ? ' · ' + escapeHtml(route.duration) : ''}</div>
+      </div>
+      ${segments ? `<div class="offline-segments"><h3>分段路线</h3>${segments}</div>` : ''}
+      ${arrivalTips ? `<div class="offline-tips"><h3>出行提示</h3><ul>${arrivalTips}</ul></div>` : ''}
+      ${route.retreatTime ? `<div class="offline-safety"><b>⚠ 最晚撤离时间：${escapeHtml(route.retreatTime)}</b>${route.turnaround?.name ? ` · 折返点：${escapeHtml(route.turnaround.name)}` : ''}</div>` : ''}
+      <div class="offline-footer">一起去滇南 · 生成于 ${new Date().toLocaleDateString('zh-CN')}</div>
+    </div>
+    <div class="share-card-actions">
+      <button class="button button-ghost" type="button" id="offline-print-btn">打印 / 保存 PDF</button>
+      <button class="button button-ghost" type="button" id="offline-close-btn">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
+  dialog.querySelector('#offline-close-btn').addEventListener('click', () => dialog.close());
+  dialog.querySelector('#offline-print-btn').addEventListener('click', () => window.print());
   dialog.addEventListener('close', () => dialog.remove());
   dialog.showModal();
 }
@@ -1681,6 +1718,11 @@ async function importHikingGpx(file) {
       showToast('GPX 文件中没有找到轨迹点', '!');
       return;
     }
+    // #28 GPX 健康检查
+    const health = gpxHealthCheck(parsed.trackPoints);
+    if (!health.isHealthy) {
+      showToast(`GPX 提示：${health.issues.join('；')}`, '⚠');
+    }
     const start = parsed.trackPoints[0];
     const end = parsed.trackPoints.at(-1);
     const distance = trackDistance(parsed.trackPoints);
@@ -1692,7 +1734,7 @@ async function importHikingGpx(file) {
       trackPoints: parsed.trackPoints,
       distance: distance > 0 ? `${(distance / 1000).toFixed(1)} km` : hikingRoute.distance,
     }, { rerender: true });
-    showToast(`已导入 ${parsed.trackPoints.length} 个轨迹点`, '✓');
+    showToast(`已导入 ${parsed.trackPoints.length} 个轨迹点${health.isHealthy ? '' : '（有问题请检查）'}`, '✓');
   } catch (error) {
     showToast(error.message || 'GPX 导入失败', '!');
   }
@@ -1752,6 +1794,7 @@ function createHikingRoutePanel() {
     ${imageGallery}
     <div class="hiking-gpx-import-row">
       <label class="button button-ghost hiking-gpx-import-btn">导入 GPX 轨迹<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
+      <button class="button button-ghost hiking-offline-card-btn" type="button">离线路线卡</button>
       ${route.trackPoints?.length ? `<small class="hiking-gpx-info">已载入 ${route.trackPoints.length} 个轨迹点</small>` : '<small class="hiking-gpx-info">导入 GPX 后可显示路线轨迹与海拔数据</small>'}
     </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
@@ -1901,6 +1944,7 @@ function createHikingRoutePanel() {
   });
   panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
   panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
+  panel.querySelector('.hiking-offline-card-btn')?.addEventListener('click', () => openOfflineRouteCard(route));
   panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
 
   // 分段路线事件处理
