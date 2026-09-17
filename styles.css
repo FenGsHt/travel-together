@@ -1093,6 +1093,13 @@ dialog.closing {
 .offline-safety { margin-top: 12px; padding: 10px 12px; background: #fdf0ec; border-radius: 8px; font-size: 13px; color: var(--terracotta); }
 .offline-footer { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); text-align: center; }
 
+/* #30 出发前动态提醒 */
+.hiking-alert-banner { padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 500; margin-bottom: 8px; animation: alert-slide-in 200ms ease-out; }
+.hiking-alert-danger { background: #fde8e8; color: #991b1b; border-left: 3px solid #991b1b; }
+.hiking-alert-warning { background: #fef3c7; color: #92400e; border-left: 3px solid #f59e0b; }
+.hiking-alert-info { background: var(--green-soft); color: var(--green); border-left: 3px solid var(--green); }
+@keyframes alert-slide-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
 /* #44 出发检查清单 */
 .hiking-checklist-section { margin: 16px 0; }
 .hiking-checklist { display: flex; flex-direction: column; gap: 4px; }

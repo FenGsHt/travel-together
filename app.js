@@ -306,6 +306,7 @@ function createEmptyHikingRoute() {
     segments: [],
     turnaround: null,
     retreatTime: '',
+    weatherAlert: null,
   };
 }
 
@@ -1707,6 +1708,57 @@ function hikingPointLabel(point, fallback) {
   return point?.name || fallback;
 }
 
+// #42 根据坐标和日期计算日落时间（简化算法）
+function calculateSunset(lat, lng, date = new Date()) {
+  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
+  const latRad = lat * Math.PI / 180;
+  const declination = -23.45 * Math.cos(2 * Math.PI * (dayOfYear + 10) / 365) * Math.PI / 180;
+  const hourAngle = Math.acos(-Math.tan(latRad) * Math.tan(declination));
+  const sunsetHour = 12 + hourAngle * 180 / Math.PI / 15 - lng / 15;
+  const hours = Math.floor(sunsetHour);
+  const minutes = Math.round((sunsetHour - hours) * 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+// #30 出发前动态提醒：根据天气和风险生成提醒
+function generateWeatherAlert(route) {
+  const alerts = [];
+  if (route.retreatTime) {
+    const now = new Date();
+    const [h, m] = route.retreatTime.split(':').map(Number);
+    const retreat = new Date();
+    retreat.setHours(h, m, 0);
+    if (now > retreat) {
+      alerts.push({ type: 'danger', message: `已超过最晚撤离时间 ${route.retreatTime}，请立即停止推进！` });
+    } else {
+      const remaining = Math.round((retreat - now) / 60000);
+      if (remaining < 60) {
+        alerts.push({ type: 'warning', message: `距离最晚撤离时间仅剩 ${remaining} 分钟` });
+      }
+    }
+  }
+  if (route.turnaround?.name) {
+    alerts.push({ type: 'info', message: `折返点：${route.turnaround.name}，超过此点应考虑返回` });
+  }
+  return alerts;
+}
+
+// #43 路线难度自动评估
+function evaluateRouteDifficulty(route) {
+  if (!route.trackPoints?.length) return route.difficulty || '';
+  const distance = trackDistance(route.trackPoints) / 1000; // km
+  const elev = elevationStats(route.trackPoints);
+  const ascent = elev?.ascent || 0;
+
+  // 基于距离和爬升的综合评分
+  let score = distance * 2 + ascent / 100;
+
+  if (score < 10) return '简单';
+  if (score < 20) return '中等';
+  if (score < 35) return '困难';
+  return '挑战';
+}
+
 
 
 function downloadHikingShareCard() {
@@ -1830,11 +1882,17 @@ function createHikingRoutePanel() {
 
   panel.innerHTML = `
     ${imageGallery}
+    ${(() => {
+      const alerts = generateWeatherAlert(route);
+      if (alerts.length === 0) return '';
+      return alerts.map(a => `<div class="hiking-alert-banner hiking-alert-${a.type}">${a.type === 'danger' ? '🚨' : a.type === 'warning' ? '⚠️' : 'ℹ️'} ${escapeHtml(a.message)}</div>`).join('');
+    })()}
     <div class="hiking-gpx-import-row">
       <label class="button button-ghost hiking-gpx-import-btn">导入 GPX 轨迹<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
       <button class="button button-ghost hiking-offline-card-btn" type="button">离线路线卡</button>
       <button class="button button-ghost hiking-offline-package-btn" type="button">离线出行包</button>
-      ${route.trackPoints?.length ? `<small class="hiking-gpx-info">已载入 ${route.trackPoints.length} 个轨迹点</small>` : '<small class="hiking-gpx-info">导入 GPX 后可显示路线轨迹与海拔数据</small>'}
+      <button class="button button-ghost hiking-auto-sunset-btn" type="button" title="根据坐标自动计算日落时间">🌅 自动日落</button>
+      ${route.trackPoints?.length ? `<small class="hiking-gpx-info">已载入 ${route.trackPoints.length} 个轨迹点 · 难度：${escapeHtml(evaluateRouteDifficulty(route))}</small>` : '<small class="hiking-gpx-info">导入 GPX 后可显示路线轨迹与海拔数据</small>'}
     </div>
     <label class="hiking-field"><span>路线名称</span><input data-hiking-field="name" value="${escapeHtml(route.name)}" placeholder="如：虎跳峡高路徒步" /></label>
     <label class="hiking-field"><span>路线说明</span><textarea data-hiking-field="summary" placeholder="记录天气、补给、危险路段或同行信息">${escapeHtml(route.summary)}</textarea></label>
@@ -1993,6 +2051,15 @@ function createHikingRoutePanel() {
   panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
   panel.querySelector('.hiking-offline-card-btn')?.addEventListener('click', () => openOfflineRouteCard(route));
   panel.querySelector('.hiking-offline-package-btn')?.addEventListener('click', () => downloadOfflinePackage(route));
+  panel.querySelector('.hiking-auto-sunset-btn')?.addEventListener('click', () => {
+    if (!route.start?.lat || !route.start?.lng) {
+      showToast('请先设置起点坐标', '!');
+      return;
+    }
+    const sunset = calculateSunset(route.start.lat, route.start.lng);
+    updateHikingRoute({ retreatTime: sunset }, { rerender: true });
+    showToast(`日落时间 ${sunset} 已填入`, '🌅');
+  });
   panel.querySelector('#hiking-gpx-file')?.addEventListener('change', event => importHikingGpx(event.target.files?.[0]));
 
   // 分段路线事件处理
