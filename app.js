@@ -2131,9 +2131,71 @@ function openAddSlotDialog(dayId, defaultTime = '10:00') {
   requestAnimationFrame(() => nameInput.focus());
 }
 
+// 推荐攻略项目：渲染推荐卡片到画布区域
+function renderRecommendationBoard() {
+  const blocks = currentProject?.data?.blocks || [];
+  const categories = {};
+  blocks.forEach(b => {
+    const cat = b.meta?.category || '其他';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(b);
+  });
+  const catOrder = ['福州周边', '江浙沪', '全国'];
+  const catLabels = { '福州周边': '️ 福州周边', '江浙沪': ' 江浙沪', '全国': '️ 全国各地' };
+
+  let html = '<div style="padding:1.5rem;max-width:1200px;margin:0 auto;">';
+  html += '<h2 style="font-size:1.5rem;margin:0 0 0.3rem;font-weight:700;">周边休闲度假推荐</h2>';
+  html += '<p style="color:#888;margin:0 0 1.5rem;font-size:0.9rem;">精选 20 个宝藏目的地 · 从小红书真实笔记整理</p>';
+
+  catOrder.forEach(cat => {
+    const items = categories[cat] || [];
+    if (!items.length) return;
+    html += `<h3 style="font-size:1.1rem;margin:1.5rem 0 0.8rem;padding-bottom:0.5rem;border-bottom:2px solid #2d5016;display:inline-block;">${catLabels[cat] || cat}（${items.length}）</h3>`;
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;">';
+    items.forEach(b => {
+      const img = b.image || '';
+      const loc = b.meta?.location || b.price || '';
+      const tags = (b.meta?.tags || []).map(t => `<span style="background:#e8f5e9;color:#2d5016;padding:2px 8px;border-radius:10px;font-size:0.7rem;margin-right:4px;">${escapeHtml(t)}</span>`).join('');
+      const url = b.meta?.source_url || '';
+      html += `<div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);display:flex;flex-direction:column;">`;
+      if (img) html += `<div style="height:160px;background:#f0f0f0;"><img src="${img}" alt="${escapeHtml(b.name)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/></div>`;
+      html += `<div style="padding:0.8rem;flex:1;display:flex;flex-direction:column;">`;
+      html += `<div style="font-weight:600;font-size:0.95rem;margin-bottom:0.3rem;">${escapeHtml(b.name)}</div>`;
+      html += `<div style="color:#e65100;font-size:0.8rem;margin-bottom:0.3rem;">📍 ${escapeHtml(loc)}</div>`;
+      html += `<div style="color:#666;font-size:0.8rem;line-height:1.5;flex:1;">${escapeHtml(b.description || '')}</div>`;
+      html += `<div style="margin-top:0.5rem;">${tags}</div>`;
+      if (url) html += `<a href="${url}" target="_blank" style="color:#ff2442;font-size:0.75rem;text-decoration:none;margin-top:0.4rem;display:inline-block;">查看原文 →</a>`;
+      html += '</div></div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  timeline.innerHTML = html;
+}
+
 function renderTimeline() {
   closeQuickAddPopover();
   const connectorLayer = document.getElementById('route-lines');
+
+  // 推荐攻略项目：隐藏画布，显示攻略内容
+  if (currentProject?.name === '周边休闲度假推荐') {
+    timeline.replaceChildren();
+    if (connectorLayer) timeline.append(connectorLayer);
+    const boardViewport = document.getElementById('board-viewport');
+    const boardShell = document.querySelector('.board-shell');
+    if (boardViewport) boardViewport.style.display = 'none';
+    if (boardShell) boardShell.style.display = 'none';
+    renderRecommendationBoard();
+    return;
+  }
+
+  // 恢复画布显示
+  const boardViewport2 = document.getElementById('board-viewport');
+  const boardShell2 = document.querySelector('.board-shell');
+  if (boardViewport2) boardViewport2.style.display = '';
+  if (boardShell2) boardShell2.style.display = '';
+
   timeline.replaceChildren();
   if (connectorLayer) timeline.append(connectorLayer);
   if (isHikingProject()) {
