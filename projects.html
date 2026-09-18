@@ -231,73 +231,12 @@
       };
 
       // 卡片主体与”进入项目”按钮保持一致；卡片内的管理操作则各自处理，避免误跳转。
-      document.querySelectorAll('.project-card:not(.vacation-recommend-card)').forEach(card => {
+      document.querySelectorAll('.project-card').forEach(card => {
         card.addEventListener('click', (event) => {
           if (event.target.closest('button, a, input, select, textarea, label')) return;
           enterProject(card.dataset.id);
         });
       });
-
-      // 在项目卡片之后插入休闲度假推荐
-      loadRecommendations();
-    }
-
-    function appendVacationRecommendations(vacationSpots) {
-      const existing = document.getElementById('vacation-recommendations-section');
-      if (existing) existing.remove();
-      if (!vacationSpots || vacationSpots.length === 0) return;
-
-      const section = document.createElement('div');
-      section.id = 'vacation-recommendations-section';
-      section.innerHTML = `
-        <div class="page-header" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0ddd5;">
-          <div>
-            <h1>周边休闲度假推荐</h1>
-            <p>精选 ${vacationSpots.length} 个宝藏目的地</p>
-          </div>
-        </div>
-        <div class="project-grid">
-          ${vacationSpots.map(s => `
-            <div class="project-card vacation-recommend-card" data-xhs-id="${s.id}" style="cursor: pointer;">
-              <div class="project-cover is-placeholder"><span style="font-size:2rem">🏞️</span></div>
-              <div class="project-title-row">
-                <h3>${escapeHtml(s.title)}</h3>
-                <span class="project-status active" style="background:#fff3e0;color:#e65100;">推荐</span>
-              </div>
-              <div class="project-card-details">
-                <div class="project-meta">
-                  <span>📍 ${escapeHtml(s.location || '')}</span>
-                  <span>📅 ${s.date || ''}</span>
-                </div>
-                <div class="project-desc">${escapeHtml(s.desc || '')}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem;">
-                  ${(s.tags||[]).map(t => `<span style="background:#e8f5e9;color:#2d5016;padding:0.2rem 0.6rem;border-radius:12px;font-size:0.75rem;">${escapeHtml(t)}</span>`).join('')}
-                </div>
-                <div class="project-stats">
-                  <div class="stat"><span class="stat-value">@${escapeHtml(s.author || '')}</span><span>分享</span></div>
-                  <div class="stat"><a href="${s.source_url || 'https://www.xiaohongshu.com/explore/' + s.id}" target="_blank" style="color:#ff2442;text-decoration:none;font-weight:500;" onclick="event.stopPropagation();">查看原文 →</a></div>
-                </div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-      projectsContainer.parentNode.appendChild(section);
-    }
-
-    async function loadRecommendations() {
-      try {
-        const resp = await fetch(API_BASE + '/api/recommendations', { credentials: 'include' });
-        if (resp.ok) { const data = await resp.json(); appendVacationRecommendations(data.items || []); }
-      } catch (e) { console.error('Load recommendations failed:', e); }
-    }
-
-    const enterProject = (projectId) => {
-
-    const enterProject = (projectId) => {
-      localStorage.setItem('currentProjectId', projectId);
-      window.location.href = 'index.html';
-    };
 
       document.querySelectorAll('.project-cover img').forEach(image => {
         image.addEventListener('error', () => {
