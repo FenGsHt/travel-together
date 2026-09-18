@@ -86,3 +86,42 @@ export async function deleteProject(projectId) {
   if (resp.status === 401) { window.location.href = 'login.html'; return false; }
   return resp.ok;
 }
+
+// ============ 推荐 API ============
+
+export async function getRecommendations() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/recommendations`, { credentials: 'include' });
+    if (!resp.ok) return { items: [] };
+    return await resp.json();
+  } catch {
+    return { items: [] };
+  }
+}
+
+export async function createRecommendation(item) {
+  return await fetchJSON(`${API_BASE}/api/recommendations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item)
+  });
+}
+
+export async function batchUpsertRecommendations(items) {
+  const resp = await fetch(`${API_BASE}/api/recommendations/batch`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ items })
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return await resp.json();
+}
+
+export async function deleteRecommendation(recId) {
+  const resp = await fetch(`${API_BASE}/api/recommendations/${recId}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  return resp.ok;
+}

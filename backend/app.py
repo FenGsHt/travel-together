@@ -1187,6 +1187,120 @@ def add_comment_with_notification(project_id):
     })
 
 
+# ============== 推荐 API ==============
+
+RECOMMENDATIONS_FILE = DATA_DIR / "recommendations.json"
+
+
+def load_recommendations():
+    """加载推荐数据。"""
+    if not RECOMMENDATIONS_FILE.exists():
+        return {"revision": 1, "items": []}
+    with open(RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        try:
+            return json.load(f)
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def save_recommendations(data):
+    """保存推荐数据。"""
+    with open(RECOMMENDATIONS_FILE, "w", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+@app.route('/api/recommendations', methods=['GET'])
+def get_recommendations():
+    """获取推荐列表。"""
+    data = load_recommendations()
+    return jsonify({"revision": data.get("revision", 1), "items": data.get("items", [])})
+
+
+@app.route('/api/recommendations', methods=['POST'])
+def create_recommendation():
+    """添加单条推荐（需认证或 AI API Key）。"""
+    if not SITE_ACCESS_TOKEN and not AI_API_KEY:
+        return jsonify({"error": "认证未配置"}), 503
+
+    # 支持 AI API Key 或站点 token 认证
+    is_ai = False
+    if AI_API_KEY:
+        api_key = request.headers.get('X-API-Key', '')
+        if api_key and hmac.compare_digest(api_key, AI_API_KEY):
+            is_ai = True
+
+    if not is_ai:
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if token != SITE_ACCESS_TOKEN:
+            return jsonify({"error": "未授权"}), 401
+
+    item = request.json
+    if not item.get('title'):
+        return jsonify({"error": "标题不能为空"}), 400
+
+    data = load_recommendations()
+    item.setdefault("id", item.get("id", ""))
+    item.setdefault("created_at", datetime.now().strftime("%Y-%m-%d"))
+    item.setdefault("source", "ai")
+    data.setdefault("items", []).append(item)
+    data["revision"] = data.get("revision", 1) + 1
+    save_recommendations(data)
+
+    return jsonify(item), 201
+
+
+@app.route('/api/recommendations/batch', methods=['PUT'])
+def batch_upsert_recommendations():
+    """批量写入/更新推荐（AI 使用）。"""
+    if not AI_API_KEY:
+        return jsonify({"error": "AI API 未配置"}), 503
+
+    api_key = request.headers.get('X-API-Key', '')
+    if not api_key or not hmac.compare_digest(api_key, AI_API_KEY):
+        return jsonify({"error": "API Key 无效"}), 401
+
+    payload = request.json
+    items = payload.get("items", [])
+    if not items:
+        return jsonify({"error": "items 不能为空"}), 400
+
+    data = load_recommendations()
+    existing = {it["id"]: it for it in data.get("items", [])}
+    for item in items:
+        if not item.get("id"):
+            continue
+        item.setdefault("created_at", datetime.now().strftime("%Y-%m-%d"))
+        item.setdefault("source", "ai")
+        existing[item["id"]] = item
+    data["items"] = list(existing.values())
+    data["revision"] = data.get("revision", 1) + 1
+    save_recommendations(data)
+
+    return jsonify({"revision": data["revision"], "count": len(data["items"])}), 200
+
+
+@app.route('/api/recommendations/<rec_id>', methods=['DELETE'])
+def delete_recommendation(rec_id):
+    """删除推荐。"""
+    if not SITE_ACCESS_TOKEN:
+        return jsonify({"error": "认证未配置"}), 503
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token != SITE_ACCESS_TOKEN:
+        return jsonify({"error": "未授权"}), 401
+
+    data = load_recommendations()
+    data["items"] = [it for it in data.get("items", []) if it.get("id") != rec_id]
+    data["revision"] = data.get("revision", 1) + 1
+    save_recommendations(data)
+
+    return jsonify({"ok": True}), 200
+
+
 # ============== 健康检查 ==============
 
 @app.route('/api/health', methods=['GET'])
