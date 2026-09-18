@@ -516,24 +516,6 @@ dialog.closing {
   background: transparent;
   box-shadow: none;
 }
-.hiking-route-hero { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 20px; align-items: stretch; }
-.hiking-route-cover { position: relative; min-height: 146px; overflow: hidden; border-radius: 13px; background: linear-gradient(145deg, #2e6253, #9eb99e); }
-.hiking-cover-image { width: 100%; height: 100%; min-height: 146px; display: block; object-fit: cover; }
-.hiking-cover-placeholder { width: 100%; height: 100%; min-height: 146px; display: grid; place-items: center; align-content: center; gap: 8px; color: rgba(255,255,255,.94); font-size: 34px; background: linear-gradient(145deg, rgba(26,69,55,.94), rgba(105,147,110,.92)); }
-.hiking-cover-placeholder small { font-size: 11px; font-weight: 600; }
-.hiking-route-cover.is-unavailable::after { content: '封面图片暂不可用'; position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.94); background: linear-gradient(145deg, rgba(26,69,55,.94), rgba(105,147,110,.92)); font-size: 12px; font-weight: 600; }
-.hiking-route-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.hiking-route-heading .eyebrow { margin-bottom: 5px; }
-.hiking-route-heading h3 { font: 600 27px/1.3 'Noto Serif SC', serif; }
-.hiking-map-button { white-space: nowrap; }
-.hiking-route-tip { margin: -6px 0 2px; color: var(--muted); font-size: 13px; line-height: 1.7; }
-.hiking-route-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px dashed #b8ccbd; border-radius: 10px; background: #f8fbf8; }
-.hiking-route-tools .button { min-height: 32px; margin: 0; padding: 6px 10px; font-size: 12px; }
-.hiking-route-tools small { color: var(--muted); font-size: 11px; }
-.hiking-share-card-button { position: relative; overflow: hidden; border-color: #245f4d; color: #fff; background: #245f4d; }
-.hiking-share-card-button::after { position: absolute; inset: 0; content: ''; background: linear-gradient(110deg, transparent 18%, rgba(255,255,255,.28) 48%, transparent 76%); transform: translateX(-115%); transition: transform .45s ease; }
-.hiking-share-card-button:hover::after,
-.hiking-share-card-button:focus-visible::after { transform: translateX(115%); }
 .hiking-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink); font-size: 13px; font-weight: 700; }
 .hiking-section-heading small { color: var(--muted); font-size: 11px; font-weight: 400; }
 .hiking-section-heading .button { min-height: 29px; margin: 0; padding: 4px 9px; font-size: 11px; }
@@ -1002,60 +984,6 @@ dialog.closing {
   overflow: hidden;
   border-radius: 20px;
 }
-.share-card {
-  padding: 32px 28px 24px;
-  background: linear-gradient(160deg, #e8f0ea 0%, #f5f1e8 50%, #fdf6ee 100%);
-  min-height: 260px;
-}
-.share-card-header { margin-bottom: 20px; }
-.share-card-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 99px;
-  background: rgba(37,95,77,.12);
-  color: var(--green);
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-.share-card-header h2 {
-  margin: 0;
-  font: 600 24px/1.3 'Noto Serif SC', serif;
-  color: var(--ink);
-}
-.share-card-route {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  background: rgba(255,255,255,.7);
-  border-radius: 12px;
-  margin-bottom: 14px;
-  font-size: 14px;
-}
-.share-card-point { flex: 1; font-weight: 600; color: var(--ink); }
-.share-card-point.start { color: var(--green); }
-.share-card-point.end { color: var(--terracotta); text-align: right; }
-.share-card-arrow { color: var(--muted); font-size: 18px; flex-shrink: 0; }
-.share-card-stats {
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 12px;
-  padding: 0 2px;
-}
-.share-card-summary {
-  font-size: 13px;
-  color: #55635c;
-  line-height: 1.7;
-  margin: 0 0 20px;
-}
-.share-card-footer {
-  padding-top: 12px;
-  border-top: 1px solid rgba(37,95,77,.15);
-  font-size: 11px;
-  color: var(--muted);
-  font-family: 'DM Mono', monospace;
-}
 .share-card-actions {
   padding: 16px 20px;
   display: flex;
@@ -1329,14 +1257,6 @@ dialog.closing {
   .hiking-project .board-viewport { height: auto; min-height: 0; overflow: visible; }
   .hiking-project .timeline { width: 100%; min-height: 0; padding: 34px 12px 96px; }
   .hiking-route-panel { width: min(100%, 620px); padding: 20px; border-radius: 15px; }
-  .hiking-route-hero { grid-template-columns: 1fr; gap: 14px; }
-  .hiking-route-cover,
-  .hiking-cover-image,
-  .hiking-cover-placeholder { min-height: 180px; }
-  .hiking-route-heading { display: grid; }
-  .hiking-map-button { justify-self: start; }
-  .hiking-route-tools { align-items: flex-start; }
-  .hiking-route-tools small { flex-basis: 100%; }
   .hiking-endpoints,
   .hiking-facts { grid-template-columns: 1fr; }
   .day-column { grid-template-columns: 1fr; gap: 9px; min-height: 124px; padding: 9px 0 18px; }

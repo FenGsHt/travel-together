@@ -2,6 +2,7 @@
 // 在 dialog 中嵌入高德地图，支持地点搜索和点击选点
 
 import { API_BASE } from './api-client.js';
+import { escapeHtml } from './utils.js';
 
 let pickerMap = null;
 let pickerMarker = null;
@@ -309,10 +310,4 @@ function cleanupPicker() {
   placeSearch = null;
   selectedLocation = null;
   resolvePicker = null;
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

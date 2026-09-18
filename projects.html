@@ -230,13 +230,90 @@
         window.location.href = 'index.html';
       };
 
-      // 卡片主体与“进入项目”按钮保持一致；卡片内的管理操作则各自处理，避免误跳转。
-      document.querySelectorAll('.project-card').forEach(card => {
+      // 卡片主体与”进入项目”按钮保持一致；卡片内的管理操作则各自处理，避免误跳转。
+      document.querySelectorAll('.project-card:not(.vacation-recommend-card)').forEach(card => {
         card.addEventListener('click', (event) => {
           if (event.target.closest('button, a, input, select, textarea, label')) return;
           enterProject(card.dataset.id);
         });
       });
+
+      // 在项目卡片之后插入休闲度假推荐
+      appendVacationRecommendations();
+    }
+
+    function appendVacationRecommendations() {
+      const existing = document.getElementById('vacation-recommendations-section');
+      if (existing) existing.remove();
+
+      const vacationSpots = [
+  {"id":"69d091d2000000001f000603","title":"在山里寻得两天清净","desc":"临安向野而生·神都武备，远离城市喧嚣，适合悠闲过个周末。民宿赠送下午茶，有手工等活动，公区宽敞好看。","author":"於皇时周","date":"04-07","location":"浙江临安","tags":["#去山里过个周末","#周末逃离城市"]},
+  {"id":"6a7f27f20000000022014032","title":"别去新疆了！浙江藏了个小赛里木湖","desc":"宁波象山饭桶山（道人山），环湖堤坝+抹茶草甸+白色风车，被网友称作'宁波小赛里木湖'。","author":"山野拾遗","date":"08-18","location":"浙江象山","tags":["#江浙沪周边游","#小赛里木湖"]},
+  {"id":"6a927cd9000000000402af6c","title":"9-10月旅行去哪里｜9月看夏末 10月看秋色","desc":"9月夏末秋初宝藏目的地：阿勒泰、甘南、威海、黔东南、阿尔山、腾冲、婺源、南京等。","author":"爱到处跑的ENFP","date":"08-29","location":"多地","tags":["#9月旅行","#秋天旅行"]},
+  {"id":"6a4b6bcc000000000602079e","title":"16个宝藏目的地大盘点｜江浙沪周边游","desc":"莫干山、安吉、千岛湖、临安、桐庐、舟山、象山、嘉兴、苏州等16个江浙沪周边目的地，适合团建。","author":"派派的100种团建","date":"07-06","location":"江浙沪","tags":["#江浙沪团建","#周边游"]},
+  {"id":"6a5b4b54000000000301ddd0","title":"适合一家人低消费、慢节奏的4个地方","desc":"安徽歙县（徽州古城）、广东惠州（海滨）、河南安阳（甲骨文）、湖北荆门（山野避暑），人均3天2晚1k以内。","author":"小Z的国内攻略簿","date":"07-18","location":"安徽/广东/河南/湖北","tags":["#亲子遛娃","#低消费旅行"]},
+  {"id":"6a83fe72000000000502aa2f","title":"台州杭州出发1.5h！海景小院staycation","desc":"温岭石塘镇，轻法式建筑+落地窗海景+山顶观景台，杭州出发1.5h直达。","author":"孤独的根号三","date":"08-18","location":"浙江台州","tags":["#台州民宿","#杭州周边游"]},
+  {"id":"69c8e979000000001a02182b","title":"时间就应该浪费在这种地方","desc":"景迈山，喝茶看落日看星星发发呆，悠闲惬意。","author":"肘子姐姐","date":"03-29","location":"云南景迈山","tags":["#景迈山","#发呆的地方"]},
+  {"id":"697f45b8000000001a02141d","title":"冷门小城48h，这里真的能让时间滞后两秒","desc":"福建永泰嵩口古镇，千年古镇+大樟溪+书屋咖啡，福州出发1h可达。","author":"一只小檎 📷","date":"05-26","location":"福建永泰","tags":["#嵩口古镇","#福州周边游"]},
+  {"id":"6a9792630000000011038981","title":"中秋去哪里","desc":"中秋4天三晚小众目的地推荐征集。","author":"洛宝是✨","date":"09-02","location":"多地","tags":["#中秋旅行","#小众目的地"]},
+  {"id":"6a68704200000000130277e9","title":"发朋友圈都以为我出国了……重点是全免费！","desc":"浙江仙居，龙潭头清澈溪水+神仙居+高迁古村，堪比巴厘岛的治愈山水。","author":"秀清","date":"07-29","location":"浙江仙居","tags":["#仙居","#浙江小巴厘岛"]},
+  {"id":"6a8e96b8000000002c03f59c","title":"清远新开业📍山野溯溪亲子小院！好chill～","desc":"清远山景亲子小院，泳池别墅，广深佛自驾1.5h直达，适合暑假遛娃、家庭出游。","author":"桃子旅行日记","date":"08-26","location":"广东清远","tags":["#清远","#亲子游"]},
+  {"id":"6a6488ac000000001003e5c1","title":"福州溪山温泉｜把整个夏天的玩水快乐承包了","desc":"连江贵安溪山温泉，网红天际叠层泳池+飘雪温泉，福州自驾北岭隧道直达。","author":"阿茜啊","date":"07-25","location":"福州连江","tags":["#福州周边游","#温泉"]},
+  {"id":"694f4554000000001e037af7","title":"2025国内年度staycation合集分享","desc":"小众staycation分享，不用出国也能度假。","author":"羊-卷儿","date":"2025-12-27","location":"多地","tags":["#staycation","#度假"]},
+  {"id":"6a9e789e000000002603887b","title":"江浙沪小众秘境Top9🍁 人少景美还出片","desc":"莫干山、临安、绍兴、乌镇、舟山、千岛湖、溧阳、安吉、桐庐9个宝藏地。","author":"杭州砺游活动策划有限公司","date":"09-07","location":"江浙沪","tags":["#江浙沪周边游","#小众景点"]},
+  {"id":"697cbd2e000000000a03e909","title":"福州周边，做一日"云上茶仙"","desc":"连江炉峰山茶山，盘山公路+云海茶香，福州出发60分钟，免费全天开放。","author":"一天一颗糖","date":"03-10","location":"福州连江","tags":["#福州周边游","#茶园"]},
+  {"id":"6a9537130000000025027682","title":"9-10月错峰✨10个小众不挤，人均最低500","desc":"阿尔山、云南永胜、山东青州、浙江安吉、福建惠安等10个错峰性价比目的地。","author":"敏敏的刹那主义","date":"08-31","location":"多地","tags":["#错峰出行","#小众旅行地"]},
+  {"id":"6a84161a000000003300ce4b","title":"福州📍平潭岛！住进海景chill小院","desc":"平潭海景小院民宿，270°全景落地窗，步行5分钟到沙滩，2分钟到悬崖草坪。","author":"Beii","date":"08-18","location":"福州平潭","tags":["#平潭岛","#海景民宿"]},
+  {"id":"692c5e2e0000000019026ed3","title":"福州1.5h直达！山海间的治愈茶海太绝了","desc":"连江炉峰山，满眼翠绿茶海梯田，随手拍都是柔光滤镜大片。","author":"NatureQ自然卷","date":"03-23","location":"福州连江","tags":["#福州周边游","#茶山"]},
+  {"id":"6a4b0c61000000001503dc3b","title":"👶带娃不费妈！4个宝藏小城2-3天闭眼","desc":"浙江苍南（海边玩沙）、松阳（茶园古村）、江苏高邮（水乡）、桐庐芦茨（清凉溪流）。","author":"小Z的国内攻略簿","date":"07-06","location":"浙江/江苏","tags":["#亲子游","#带娃旅行"]},
+  {"id":"6a68a034000000000f010926","title":"福州周边游🚗自驾1h直达避暑胜地","desc":"罗汉台云海风车+雪峰寺千年古刹+双溪村溪水清透，福州出发全程约1h。","author":"是隔壁老王啊","date":"07-28","location":"福州","tags":["#福州自驾游","#避暑"]}
+      ];
+
+      const section = document.createElement('div');
+      section.id = 'vacation-recommendations-section';
+      section.innerHTML = `
+        <div class="page-header" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0ddd5;">
+          <div>
+            <h1>🏞️ 周边休闲度假推荐</h1>
+            <p>精选 20 个宝藏目的地 · 来自小红书真实分享</p>
+          </div>
+        </div>
+        <div class="project-grid">
+          ${vacationSpots.map(s => `
+            <div class="project-card vacation-recommend-card" data-xhs-id="${s.id}" style="cursor: pointer;">
+              <div class="project-cover is-placeholder" aria-label="休闲度假推荐">
+                <span style="font-size: 2rem;">🏞️</span>
+              </div>
+              <div class="project-title-row">
+                <h3>${escapeHtml(s.title)}</h3>
+                <span class="project-status active" style="background: #fff3e0; color: #e65100;">小红书推荐</span>
+              </div>
+              <div class="project-card-details">
+                <div class="project-meta">
+                  <span>📍 ${escapeHtml(s.location)}</span>
+                  <span>📅 ${s.date}</span>
+                </div>
+                <div class="project-desc">${escapeHtml(s.desc)}</div>
+                <div class="project-card-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem;">
+                  ${(s.tags||[]).map(t => `<span style="background:#e8f5e9;color:#2d5016;padding:0.2rem 0.6rem;border-radius:12px;font-size:0.75rem;">${escapeHtml(t)}</span>`).join('')}
+                </div>
+                <div class="project-stats">
+                  <div class="stat"><span class="stat-value">@${escapeHtml(s.author)}</span><span>分享</span></div>
+                  <div class="stat"><a class="xhs-link" href="https://www.xiaohongshu.com/explore/${s.id}" target="_blank" style="color:#ff2442;text-decoration:none;font-weight:500;" onclick="event.stopPropagation();">查看原文 →</a></div>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      projectsContainer.parentNode.appendChild(section);
+    }
+
+    const enterProject = (projectId) => {
+      localStorage.setItem('currentProjectId', projectId);
+      window.location.href = 'index.html';
+    };
 
       document.querySelectorAll('.project-cover img').forEach(image => {
         image.addEventListener('error', () => {

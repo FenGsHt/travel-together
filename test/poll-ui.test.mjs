@@ -169,7 +169,11 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(app, /function isHikingProject/);
   assert.match(app, /function createHikingRoutePanel/);
   assert.match(app, /if \(isHikingProject\(\)\) \{\n    timeline\.append\(createHikingRoutePanel\(\)\)/);
-  assert.match(app, /addHikingRoute\([\s\S]*hikingRoute\?\.start,[\s\S]*hikingRoute\?\.end,[\s\S]*hikingRoute\?\.trackPoints,[\s\S]*hikingRoute\?\.checkpoints,/);
+  assert.match(app, /addHikingRoute\(/);
+  assert.match(app, /hikingRoute\?\.start/);
+  assert.match(app, /hikingRoute\?\.end/);
+  assert.match(app, /hikingRoute\?\.trackPoints/);
+  assert.match(app, /hikingRoute\?\.checkpoints/);
   assert.match(mapView, /export function getWalkingRoute/);
   assert.match(mapView, /export function addHikingRoute/);
   assert.match(styles, /\.hiking-route-panel/);
@@ -178,8 +182,8 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(app, /coverImage: ''/);
   assert.match(app, /arrivalTip: ''/);
   assert.match(app, /出行提示（公交／自驾／停车）/);
-  assert.match(app, /hiking-route-cover/);
-  assert.match(styles, /\.hiking-route-hero/);
+  assert.match(app, /hiking-gpx-import-row/);
+  assert.match(app, /hiking-segments-section/);
   assert.match(styles, /\.hiking-project \.board-viewport \{[\s\S]*background: transparent;[\s\S]*touch-action: auto;/);
   assert.match(styles, /\.hiking-project \.hiking-route-panel \{[\s\S]*box-shadow: none;/);
   assert.match(app, /if \(isHikingProject\(\) \|\| event\.button !== 0/);
@@ -189,13 +193,12 @@ test('hiking projects use one route instead of a day-by-day itinerary', async ()
   assert.match(backend, /徒步路线至少需要两条检索来源/);
 });
 
-test('hiking routes import and export GPX tracks with an elevation profile', async () => {
+test('hiking routes import GPX tracks and provide safety and sharing controls', async () => {
   const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
   const mapView = await readFile(new URL('../src/map-view.js', import.meta.url), 'utf8');
 
   assert.match(app, /importHikingGpx/);
-  assert.match(app, /routeToGpx\(hikingRoute\)/);
-  assert.match(app, /hiking-elevation-chart/);
+  assert.match(app, /gpxHealthCheck/);
   assert.match(app, /hiking-checkpoints-section/);
   assert.match(app, /downloadHikingShareCard/);
   assert.match(app, /id="hiking-share-card"/);

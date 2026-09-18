@@ -56,7 +56,7 @@ function removeFromTimeline(timelineId) {
 }
 
 // #13 移动端长按操作菜单
-function openMobileActionMenu(timelineId, name, touchY) {
+function openMobileActionMenu(timelineId, name) {
   let sheet = document.getElementById('mobile-action-sheet');
   if (!sheet) {
     sheet = document.createElement('div');
@@ -76,9 +76,6 @@ function openMobileActionMenu(timelineId, name, touchY) {
   const list = sheet.querySelector('.mobile-action-list');
   const actions = [
     { label: '查看详情', icon: '📋', action: () => { closeMobileActionMenu(); openTimelineItemDetail(timelineId); } },
-    { label: '选择位置', icon: '📍', action: () => { closeMobileActionMenu(); /* trigger location picker */ } },
-    { label: '备选分叉', icon: '', action: () => { closeMobileActionMenu(); /* trigger branch */ } },
-    { label: '添加评论', icon: '💬', action: () => { closeMobileActionMenu(); } },
     { label: '删除行程', icon: '', action: () => { closeMobileActionMenu(); removeFromTimeline(timelineId); }, danger: true },
   ];
   list.innerHTML = actions.map(a =>
@@ -93,46 +90,6 @@ function openMobileActionMenu(timelineId, name, touchY) {
 function closeMobileActionMenu() {
   const sheet = document.getElementById('mobile-action-sheet');
   if (sheet) sheet.classList.remove('mobile-action-visible');
-}
-
-// #25 路线分享卡片
-function openShareCard(route) {
-  const dialog = document.createElement('dialog');
-  dialog.className = 'share-card-dialog';
-  const startName = route.start?.name || '未设置起点';
-  const endName = route.end?.name || '未设置终点';
-  const stats = [
-    route.difficulty ? `难度 ${route.difficulty}` : '',
-    route.distance ? `距离 ${route.distance}` : '',
-    route.duration ? `用时 ${route.duration}` : '',
-  ].filter(Boolean).join(' · ');
-  dialog.innerHTML = `
-    <button class="dialog-close" type="button" aria-label="关闭">×</button>
-    <div class="share-card">
-      <div class="share-card-header">
-        <span class="share-card-badge">🥾 徒步路线</span>
-        <h2>${escapeHtml(route.name || '未命名路线')}</h2>
-      </div>
-      <div class="share-card-route">
-        <span class="share-card-point start">起点 · ${escapeHtml(startName)}</span>
-        <span class="share-card-arrow">→</span>
-        <span class="share-card-point end">终点 · ${escapeHtml(endName)}</span>
-      </div>
-      ${stats ? `<div class="share-card-stats">${stats}</div>` : ''}
-      ${route.summary ? `<p class="share-card-summary">${escapeHtml(route.summary)}</p>` : ''}
-      <div class="share-card-footer">
-        <span>一起去滇南 · travel-together</span>
-      </div>
-    </div>
-    <div class="share-card-actions">
-      <button class="button button-ghost share-card-close" type="button">关闭</button>
-    </div>
-  `;
-  document.body.appendChild(dialog);
-  dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
-  dialog.querySelector('.share-card-close').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => dialog.remove());
-  dialog.showModal();
 }
 
 // #40 离线路线卡（可打印）
@@ -306,7 +263,6 @@ function createEmptyHikingRoute() {
     segments: [],
     turnaround: null,
     retreatTime: '',
-    weatherAlert: null,
   };
 }
 
@@ -1471,7 +1427,7 @@ function createTimelineCard(item) {
   card.addEventListener('touchstart', (e) => {
     if (e.target.closest('button, input')) return;
     longPressTimer = setTimeout(() => {
-      openMobileActionMenu(item.id, item.name, e.touches[0].clientY);
+      openMobileActionMenu(item.id, item.name);
     }, 500);
   }, { passive: true });
   card.addEventListener('touchend', () => clearTimeout(longPressTimer));
@@ -1720,8 +1676,8 @@ function calculateSunset(lat, lng, date = new Date()) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-// #30 出发前动态提醒：根据天气和风险生成提醒
-function generateWeatherAlert(route) {
+// 根据撤离时间和折返点生成安全提醒；天气与景区公告由出发前核验。
+function generateHikingSafetyAlerts(route) {
   const alerts = [];
   if (route.retreatTime) {
     const now = new Date();
@@ -1883,12 +1839,13 @@ function createHikingRoutePanel() {
   panel.innerHTML = `
     ${imageGallery}
     ${(() => {
-      const alerts = generateWeatherAlert(route);
+      const alerts = generateHikingSafetyAlerts(route);
       if (alerts.length === 0) return '';
       return alerts.map(a => `<div class="hiking-alert-banner hiking-alert-${a.type}">${a.type === 'danger' ? '🚨' : a.type === 'warning' ? '⚠️' : 'ℹ️'} ${escapeHtml(a.message)}</div>`).join('');
     })()}
     <div class="hiking-gpx-import-row">
       <label class="button button-ghost hiking-gpx-import-btn">导入 GPX 轨迹<input id="hiking-gpx-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden /></label>
+      <button class="button button-ghost" type="button" id="hiking-share-card">生成分享图</button>
       <button class="button button-ghost hiking-offline-card-btn" type="button">离线路线卡</button>
       <button class="button button-ghost hiking-offline-package-btn" type="button">离线出行包</button>
       <button class="button button-ghost hiking-auto-sunset-btn" type="button" title="根据坐标自动计算日落时间">🌅 自动日落</button>
@@ -2047,8 +2004,6 @@ function createHikingRoutePanel() {
       updateHikingRoute({ checkpoints: (hikingRoute.checkpoints || []).filter((_, itemIndex) => itemIndex !== index) }, { rerender: true });
     });
   });
-  panel.querySelector('.hiking-map-button').addEventListener('click', () => switchView('map'));
-  panel.querySelector('.hiking-share-button')?.addEventListener('click', () => openShareCard(route));
   panel.querySelector('.hiking-offline-card-btn')?.addEventListener('click', () => openOfflineRouteCard(route));
   panel.querySelector('.hiking-offline-package-btn')?.addEventListener('click', () => downloadOfflinePackage(route));
   panel.querySelector('.hiking-auto-sunset-btn')?.addEventListener('click', () => {
@@ -2462,7 +2417,11 @@ function hikingMapSignature(route) {
   const points = [...(route?.checkpoints || [])]
     .map(point => [point.lat, point.lng, point.name].join(','))
     .join('~');
-  return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng, points]
+  const track = route?.trackPoints || [];
+  const trackSignature = [track[0], track[Math.floor(track.length / 2)], track.at(-1)]
+    .map(point => point ? [point.lat, point.lng, point.ele].join(',') : '')
+    .join('~');
+  return ['hiking', route?.name, route?.start?.lat, route?.start?.lng, route?.end?.lat, route?.end?.lng, points, track.length, trackSignature]
     .map(value => String(value ?? ''))
     .join('|');
 }
@@ -2482,6 +2441,7 @@ function renderMapView({ force = false } = {}) {
     addHikingRoute(
       hikingRoute?.start,
       hikingRoute?.end,
+      hikingRoute?.trackPoints,
       hikingRoute?.checkpoints,
     );
     mapViewSignature = nextSignature;

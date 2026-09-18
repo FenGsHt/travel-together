@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1e8" />
+  <title>周边休闲度假推荐 · 一起去滇南</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260912-hiking-layout" />
+  <style>
+    .vacation-page {
+      min-height: 100vh;
+      background: var(--color-background, #f5f1e8);
+    }
+
+    .vacation-header {
+      background: linear-gradient(135deg, #2d5016 0%, #4a7c2e 100%);
+      color: white;
+      padding: 3rem 2rem;
+      text-align: center;
+    }
+
+    .vacation-header h1 {
+      font-size: 2.5rem;
+      margin: 0 0 0.5rem;
+      font-weight: 700;
+    }
+
+    .vacation-header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+      margin: 0;
+    }
+
+    .vacation-nav {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1rem 2rem;
+      background: white;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .vacation-nav a {
+      color: #2d5016;
+      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .vacation-nav a:hover {
+      background: #f0f0f0;
+    }
+
+    .vacation-nav a.active {
+      background: #2d5016;
+      color: white;
+    }
+
+    .vacation-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .vacation-stats {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      flex: 1;
+      min-width: 200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .stat-card h3 {
+      font-size: 0.9rem;
+      color: #666;
+      margin: 0 0 0.5rem;
+      font-weight: 500;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #2d5016;
+    }
+
+    .vacation-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .vacation-card {
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transition: transform 0.3s, box-shadow 0.3s;
+      cursor: pointer;
+    }
+
+    .vacation-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+
+    .vacation-card-header {
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #f8f4e9 0%, #fff 100%);
+      border-bottom: 1px solid #eee;
+    }
+
+    .vacation-card-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #2d5016;
+      margin: 0 0 0.5rem;
+      line-height: 1.4;
+    }
+
+    .vacation-card-meta {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .vacation-card-body {
+      padding: 1.5rem;
+    }
+
+    .vacation-card-desc {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #444;
+      margin: 0 0 1rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .vacation-card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .tag {
+      background: #e8f5e9;
+      color: #2d5016;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .vacation-card-footer {
+      padding: 1rem 1.5rem;
+      background: #f9f9f9;
+      border-top: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .author {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .author-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4a7c2e 0%, #2d5016 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .view-on-xhs {
+      color: #ff2442;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .view-on-xhs:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal for full content */
+    .vacation-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .vacation-modal.active {
+      display: flex;
+    }
+
+    .vacation-modal-content {
+      background: white;
+      border-radius: 16px;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .vacation-modal-header {
+      padding: 2rem;
+      background: linear-gradient(135deg, #2d5016 0%, #4a7c2e 100%);
+      color: white;
+      border-radius: 16px 16px 0 0;
+    }
+
+    .vacation-modal-title {
+      font-size: 1.8rem;
+      margin: 0 0 0.5rem;
+      font-weight: 700;
+    }
+
+    .vacation-modal-meta {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+
+    .vacation-modal-body {
+      padding: 2rem;
+    }
+
+    .vacation-modal-desc {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #333;
+      white-space: pre-wrap;
+    }
+
+    .vacation-modal-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .vacation-modal-close:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .vacation-modal-link {
+      display: inline-block;
+      margin-top: 1.5rem;
+      padding: 0.8rem 1.5rem;
+      background: #ff2442;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .vacation-modal-link:hover {
+      background: #e0203a;
+    }
+
+    @media (max-width: 768px) {
+      .vacation-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .vacation-header h1 {
+        font-size: 1.8rem;
+      }
+
+      .vacation-stats {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body class="vacation-page">
+  <div class="vacation-header">
+    <h1>🏞️ 周边休闲度假推荐</h1>
+    <p>精选 20 个宝藏目的地 · 来自小红书真实分享</p>
+  </div>
+
+  <nav class="vacation-nav">
+    <a href="index.html">← 返回首页</a>
+    <a href="vacation-spots.html" class="active">休闲度假</a>
+    <a href="guide.html">完整攻略</a>
+  </nav>
+
+  <div class="vacation-container">
+    <div class="vacation-stats">
+      <div class="stat-card">
+        <h3>推荐地点</h3>
+        <div class="value">20</div>
+      </div>
+      <div class="stat-card">
+        <h3>数据来源</h3>
+        <div class="value">小红书</div>
+      </div>
+      <div class="stat-card">
+        <h3>更新时间</h3>
+        <div class="value" id="update-time">2026-09-18</div>
+      </div>
+    </div>
+
+    <div class="vacation-grid" id="vacation-grid">
+      <!-- Cards will be rendered here by JavaScript -->
+    </div>
+  </div>
+
+  <!-- Modal for full content -->
+  <div class="vacation-modal" id="vacation-modal">
+    <div class="vacation-modal-content">
+      <button class="vacation-modal-close" id="modal-close">×</button>
+      <div class="vacation-modal-header">
+        <h2 class="vacation-modal-title" id="modal-title"></h2>
+        <div class="vacation-modal-meta">
+          <span id="modal-author"></span>
+          <span id="modal-date"></span>
+        </div>
+      </div>
+      <div class="vacation-modal-body">
+        <div class="vacation-modal-desc" id="modal-desc"></div>
+        <a class="vacation-modal-link" id="modal-link" href="#" target="_blank">在小红书查看原文 →</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Vacation spots data
+    const vacationSpots = [
+  {
+    "id": "69d091d2000000001f000603",
+    "title": "在山里寻得两天清净",
+    "desc": "之前刷到临安向野而生·神都武备这个窗景感觉惊为天人，周末就去住了两天。这个地方离城市比较远，周边也人烟稀少，所以很是清净。附近步行或骑车可以到达的只有一座吊桥和小村子，剩下的就是沿江的乡野风光了，适合悠闲过个周末。\n\n江景只有双床房，床不算宽敞，设施也一般，服务倒是挺好的，有果盘有晚安汤。窗景很好看，我住的茶隐双床房，感觉舒适双床房的窗景会更好看一点，不过面积更小。民宿也有无窗景更便宜的房型，因为公区宽敞又好看，且大部分时间都是在公区坐着，所以这些房型感觉性价比高一点。\n\n民宿赠送了下午茶，也有手工这些活动，在公区吃吃喝喝做做手工消磨时间很适意。民宿还有影音室小船捕鱼这些活动，也可以乘快艇沿江去景区，不过我们都没有体验因为离镇上太远，民宿吃饭需要提前一天预订购买食材，价格偏贵，菜式都挺喜欢的，只是个人感觉口味偏咸了，早饭倒是不错的。",
+    "author": "於皇时周",
+    "date": "04-07",
+    "tags": ["#去山里过个周末", "#周末逃离城市", "#山野治愈生活"]
+  },
+  {
+    "id": "6a7f27f20000000022014032",
+    "title": "别去新疆了！浙江藏了个小赛里木湖",
+    "desc": "📍Day1 山野治愈｜饭桶山（道人山）\n🎫门票：全程免费\n🧭导航：象山饭桶山（道人山）\n⏰游玩时长：2-3小时\n\n被网友称作"宁波小赛里木湖"，真的不是吹的。\n环湖堤坝围出碧蓝内湖，搭配大片抹茶色临海草甸、白色风车，远处就是无垠大海，站在山顶那一刻，真的以为自己闯进了新疆草原。\n\n运气好还能偶遇散养的羊群，慢悠悠在草坡上吃草闲逛，氛围感像闯进了宫崎骏动画。",
+    "author": "山野拾遗",
+    "date": "08-18",
+    "tags": ["#江浙沪周边游", "#宁波旅行", "#小赛里木湖"]
+  },
+  {
+    "id": "6a927cd9000000000402af6c",
+    "title": "9-10月旅行去哪里✨ 9月看夏末| 10月看秋色",
+    "desc": "🍂✨一起去寻找秋色吧\n\n#9月旅行 #10月旅行 #秋天旅行 #国内旅行推荐 #旅行攻略 #秋天去哪里玩 #9月适合去哪里 #10月适合去哪里 #阿勒泰 #甘南 #威海 #黔东南 #阿尔山 #腾冲 #婺源 #南京旅行",
+    "author": "爱到处跑的ENFP",
+    "date": "08-29",
+    "tags": ["#9月旅行", "#10月旅行", "#秋天旅行"]
+  },
+  {
+    "id": "6a4b6bcc000000000602079e",
+    "title": "16个宝藏目的地大盘点🌊江浙沪周边游",
+    "desc": "HR姐妹看过来！江浙沪周边团建再也不用愁啦😊\n山水治愈、古镇漫游、海岛浪漫全都有🏕️✨\n适合15-300人团队出行，直接抄作业不踩雷👇\n\n🏔️【山水治愈系】\n🌿莫干山：竹海徒步吸氧、民国老街漫游、山野露营\n🎋安吉：悬崖秋千挑战、采白茶品茶香、竹海漂流\n🏞️千岛湖：湖景骑行追风、环湖露营看星空",
+    "author": "派派的100种团建",
+    "date": "07-06",
+    "tags": ["#江浙沪团建", "#莫干山", "#安吉"]
+  },
+  {
+    "id": "6a5b4b54000000000301ddd0",
+    "title": "适合一家人低消费、慢节奏的4个地方",
+    "desc": "低消费·慢节奏·4个宝藏遛娃地 吐血整理‼️一家四口3天2晚人均1k以内，高铁直达，不卷不赶趟，收藏就能直接抄作业👇\n\n🌿1. 安徽歙县｜徽州人文研学小城\n🚄交通：杭州高铁1h直达歙县北站\n🏨住宿：徽州古城内民宿110-170r/晚\n\n🌊2. 广东惠州｜珠三角平价海滨小城\n🚄交通：深圳高铁30分钟直达惠州南站\n\n🍃3. 河南安阳｜中原历史亲子研学地\n\n🏞️4. 湖北荆门｜鄂中山野避暑小城",
+    "author": "小Z的国内攻略簿",
+    "date": "07-18",
+    "tags": ["#亲子遛娃", "#低消费旅行", "#高铁短途游"]
+  },
+  {
+    "id": "6a83fe72000000000502aa2f",
+    "title": "台州📍杭州出发1.5h！海景小院staycation",
+    "desc": "📍坐标：温岭·石塘镇\n杭州出发1.5h直达，江浙沪周末 getaway 超方便🚗\n\n🏡轻法式建筑，白色外墙+拱形门洞+绿植环绕\n随手拍都像南法度假画报📸\n落地窗外就是山景海景，清晨看云海，夜晚听浪声🌙\n\n🛏️躺在床上看海，被山海包围的感觉绝了",
+    "author": "孤独的根号三",
+    "date": "08-18",
+    "tags": ["#台州民宿", "#海景民宿", "#杭州周边游"]
+  },
+  {
+    "id": "69c8e979000000001a02182b",
+    "title": "时间就应该浪费在这种地方。。。",
+    "desc": "景迈山真的好美啊！！\n喝喝茶 看落日 看星星 发发呆 做手工 ～\n一天过的好快好快！！好悠闲啊！",
+    "author": "肘子姐姐",
+    "date": "03-29",
+    "tags": ["#景迈山", "#旅行疗愈", "#发呆的地方"]
+  },
+  {
+    "id": "697f45b8000000001a02141d",
+    "title": "冷门小城48h，这里真的能让时间滞后两秒",
+    "desc": "走过不少古镇\n嵩口的质地尤为特别\n穿城而过的大樟溪\n千年古镇的历史积淀\n\n📍位置：福建永泰嵩口古镇\n🚗交通：厦门出发2.5h，福州出发1h\n\n🔶鹤形路/龙口祖厝\n🔶古渡口/大樟溪边漫步\n🔶另一只鹅/拔槐楼（书屋咖啡店）\n🔶嵩口人民zf/打开嵩口文创店",
+    "author": "一只小檎 📷",
+    "date": "05-26",
+    "tags": ["#嵩口古镇", "#永泰", "#小众旅行地"]
+  },
+  {
+    "id": "6a9792630000000011038981",
+    "title": "中秋去哪里",
+    "desc": "说说你们以前中秋去过的地方，有没有人少的，打算请一天假，凑4天三晚",
+    "author": "洛宝是✨",
+    "date": "09-02",
+    "tags": ["#中秋旅行", "#小众目的地"]
+  },
+  {
+    "id": "6a68704200000000130277e9",
+    "title": "发朋友圈都以为我出国了……重点是全免费啊！",
+    "desc": "终于在浙江挖到了夏日理想度假地！\n不用远赴海边，在仙居就藏着堪比巴厘岛的治愈山水🌊\n龙潭头清澈见底的碧绿溪水，配上慢悠悠的桨板，满眼都是清新绿意\n\n🌿 神仙两日游玩路线\nDay1 抵达仙居 → 高迁古村闲逛 → 仙气仙景村打卡\nDay2 清晨错峰龙潭头玩水拍照 → 下午畅游神仙居",
+    "author": "秀清",
+    "date": "07-29",
+    "tags": ["#仙居", "#龙潭头", "#神仙居"]
+  },
+  {
+    "id": "6a8e96b8000000002c03f59c",
+    "title": "清远新开业📍山野溯溪亲子小院！好chill～",
+    "desc": "#周末去哪儿 清远！新开的！山景亲子小院✨ 珠三角短途度假出游地！\n\n🚩坐标：清远\n⏰车程：广深佛自驾1.5小时直达\n🉑适配：暑假遛娃｜家庭短途出游｜闺蜜好友小聚\n\n🏡多元户型｜适配所有出行人数\n🔸沉浸式庭院休闲\n🔸全套娱玩配置",
+    "author": "桃子旅行日记",
+    "date": "08-26",
+    "tags": ["#清远", "#亲子游", "#溯溪玩水"]
+  },
+  {
+    "id": "6a6488ac000000001003e5c1",
+    "title": "福州溪山温泉｜把整个夏天的玩水快乐承包了",
+    "desc": "📍地址：连江县潘渡乡贵安村溪山路1号\n⏰：工作日15:00-23:00；周末10:00-23:00\n🎫票价：2个成人160R（1.2m以下儿童免票）\n🚗交通：福州自驾北岭隧道无过路费，景区停车场免费\n\n❗️夏日必玩玩水项目：网红天际叠层泳池（免费桨板）、儿童水上游乐区、飘雪温泉",
+    "author": "阿茜啊🐽",
+    "date": "07-25",
+    "tags": ["#福州周边游", "#温泉", "#玩水"]
+  },
+  {
+    "id": "694f4554000000001e037af7",
+    "title": "2025国内年度staycation合集分享…",
+    "desc": "一些小众staycation分享\n原来不用出国也能度假\n2026年继续探索旅途中的家",
+    "author": "羊-卷儿",
+    "date": "2025-12-27",
+    "tags": ["#staycation", "#度假", "#江浙沪周边游"]
+  },
+  {
+    "id": "6a9e789e000000002603887b",
+    "title": "江浙沪小众秘境Top9🍁 人少景美还出片！",
+    "desc": "姐妹们！！还在愁假期去哪儿玩吗😭\n整理了9个江浙沪周边宝藏地，山野、古镇、湖泊、森林、乐园全都有！\n\n🌲 莫干山\n🌳 临安\n🏞️ 绍兴\n🏮 乌镇\n🌊 舟山\n🏝️ 千岛湖\n🎋 溧阳\n🌿 安吉\n🏕️ 桐庐",
+    "author": "杭州砺游活动策划有限公司",
+    "date": "09-07",
+    "tags": ["#江浙沪周边游", "#小众景点", "#秋日旅行"]
+  },
+  {
+    "id": "697cbd2e000000000a03e909",
+    "title": "福州周边，做一日"云上茶仙"",
+    "desc": "把我们"炉"里的火苗暂时拨小，去往连江那座叫炉峰山的茶山，让云海与茶香"慢炖"。\n\n🌄 上山之路：\n想象一下，钻进车里，沿着一条不断向上的盘山公路盘旋。窗外，是层层叠叠、漫山遍野的绿意\n\n🚗导航目的地：直接导航"炉峰山观景台"，从福州市区出发大约60分钟车程\n🍵 ⛰️山顶时光：看一场日出或日落",
+    "author": "一天一颗糖",
+    "date": "03-10",
+    "tags": ["#福州周边游", "#连江", "#茶园"]
+  },
+  {
+    "id": "6a9537130000000025027682",
+    "title": "9-10月错峰✨10个小众不挤，人均最低500",
+    "desc": "想赶在国庆前错峰出去玩？\n整理了10个性价比超高的短途好去处\n\n✅内蒙古阿尔山 4.8分\n✅云南永胜 4.5分\n✅山东青州 4.7分\n✅浙江安吉 4.6分\n✅福建惠安 4.6分\n✅江西资溪 4.5分\n✅四川崇州 4.7分\n✅安徽泾县 4.8分\n✅湖南浏阳 4.6分\n✅甘肃临洮 4.5分",
+    "author": "敏敏的刹那主义",
+    "date": "08-31",
+    "tags": ["#错峰出行", "#小众旅行地", "#性价比"]
+  },
+  {
+    "id": "6a84161a000000003300ce4b",
+    "title": "福州📍平潭岛！住进海景chill小院~超放松！！",
+    "desc": "谁懂啊！在平潭挖到满分海景小院民宿✨\n一边是大海芦苇荡，一边是无边泳池，直接把山海浪漫拿捏住🌊\n\n📍地理位置绝了\n步行5分钟直达沙滩海边，早起可以去看海上日出\n2分钟抵达悬崖草坪，5分钟到镜沙黑石洞\n\n🏡氛围感海景客房\n270°全景大落地窗，海景毫无遮挡",
+    "author": "Beii",
+    "date": "08-18",
+    "tags": ["#平潭岛", "#海景民宿", "#海边度假"]
+  },
+  {
+    "id": "692c5e2e0000000019026ed3",
+    "title": "福州1.5h直达！山海间的治愈茶海太绝了🍵",
+    "desc": "连江炉峰山真的藏着神仙风景、\n福州出发自驾1.5小时就能抵达，一路盘山而上，闯进满眼翠绿的茶海梯田里\n\n✨保姆级游玩Tips：\n📍地址：福州市连江县炉峰山茶场\n🚗交通：建议自驾！福州出发1.5小时直达\n☕️关于吃喝：奶茶咖啡20+一杯",
+    "author": "NatureQ自然卷",
+    "date": "03-23",
+    "tags": ["#福州周边游", "#连江", "#茶山"]
+  },
+  {
+    "id": "6a4b0c61000000001503dc3b",
+    "title": "👶🏻带娃不费妈！4个宝藏小城2-3天闭眼",
+    "desc": "🌊浙江苍南｜海边玩沙小城\n适合1–6岁低龄宝宝\n🚞交通：江浙沪高铁2h直达\n\n🌿浙江松阳｜茶园古村小城\n适合2–7岁孩童\n\n🏡江苏高邮｜江南平缓水乡小城\n适合1–6岁小月龄宝宝\n\n🎋浙江桐庐芦茨｜清凉溪流小城\n适合2–8岁活力宝宝",
+    "author": "小Z的国内攻略簿",
+    "date": "07-06",
+    "tags": ["#亲子游", "#带娃旅行", "#小众小城"]
+  },
+  {
+    "id": "6a68a034000000000f010926",
+    "title": "福州周边游🚗自驾1h直达避暑胜地⛰️",
+    "desc": "周末别躺了！这条福州周边绝美自驾线，一脚油门闯进宫崎骏夏天🌿\n\n✅自驾攻略：从福州出发走三环→绕城高速→X115县道，全程约1h。\n\n1️⃣罗汉台！盘山路弯多，慢行多鸣笛\n2️⃣雪峰寺：千年古刹红墙黛瓦\n3️⃣双溪村：溪水清透见底",
+    "author": "是隔壁老王啊",
+    "date": "07-28",
+    "tags": ["#福州自驾游", "#避暑", "#周末去哪儿"]
+  }
+];
+
+    // Render vacation cards
+    const grid = document.getElementById('vacation-grid');
+
+    vacationSpots.forEach((spot, index) => {
+      const card = document.createElement('div');
+      card.className = 'vacation-card';
+      card.innerHTML = `
+        <div class="vacation-card-header">
+          <h3 class="vacation-card-title">${spot.title}</h3>
+          <div class="vacation-card-meta">
+            <span>📅 ${spot.date}</span>
+            <span>❤️ ${spot.likes || '1'}</span>
+          </div>
+        </div>
+        <div class="vacation-card-body">
+          <p class="vacation-card-desc">${spot.desc}</p>
+          <div class="vacation-card-tags">
+            ${(spot.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
+          </div>
+        </div>
+        <div class="vacation-card-footer">
+          <div class="author">
+            <div class="author-avatar">${spot.author[0]}</div>
+            <span>${spot.author}</span>
+          </div>
+          <a class="view-on-xhs" href="https://www.xiaohongshu.com/explore/${spot.id}" target="_blank">
+            查看原文 →
+          </a>
+        </div>
+      `;
+
+      card.addEventListener('click', () => openModal(spot));
+      grid.appendChild(card);
+    });
+
+    // Modal functionality
+    const modal = document.getElementById('vacation-modal');
+    const modalClose = document.getElementById('modal-close');
+
+    function openModal(spot) {
+      document.getElementById('modal-title').textContent = spot.title;
+      document.getElementById('modal-author').textContent = `@${spot.author}`;
+      document.getElementById('modal-date').textContent = spot.date;
+      document.getElementById('modal-desc').textContent = spot.desc;
+      document.getElementById('modal-link').href = `https://www.xiaohongshu.com/explore/${spot.id}`;
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    modalClose.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('active')) {
+        closeModal();
+      }
+    });
+  </script>
+</body>
+</html>
