@@ -755,7 +755,17 @@ function dayNavigationSummary(items) {
 
 function renderDayNavigation() {
   const list = document.getElementById('day-nav-list');
+  const section = document.querySelector('.day-nav');
   if (!list) return;
+
+  // 推荐攻略项目不显示天数导航
+  if (currentProject?.name === '周边休闲度假推荐') {
+    if (section) section.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  if (section) section.style.display = '';
+
   if (isHikingProject()) {
     const startName = hikingRoute?.start?.name || '选择起点';
     const endName = hikingRoute?.end?.name || '选择终点';
