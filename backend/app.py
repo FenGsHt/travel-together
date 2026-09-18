@@ -1301,6 +1301,28 @@ def delete_recommendation(rec_id):
     return jsonify({"ok": True}), 200
 
 
+GUIDE_PAGES_FILE = DATA_DIR / "guide_pages.json"
+
+
+@app.route('/api/guide-pages/<path:project_name>', methods=['GET'])
+def get_guide_page(project_name):
+    """返回项目的自定义 HTML 攻略页面。"""
+    from urllib.parse import unquote
+    project_name = unquote(project_name)
+    if not GUIDE_PAGES_FILE.exists():
+        return jsonify({"error": "攻略页面不存在"}), 404
+    with open(GUIDE_PAGES_FILE, "r", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        try:
+            data = json.load(f)
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    html = data.get(project_name)
+    if not html:
+        return jsonify({"error": "该项目没有攻略页面"}), 404
+    return Response(html, mimetype='text/html; charset=utf-8')
+
+
 # ============== 健康检查 ==============
 
 @app.route('/api/health', methods=['GET'])

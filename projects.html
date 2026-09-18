@@ -217,7 +217,7 @@
                   <button class="manage-members-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">管理成员</button>
                   <button class="toggle-project-status-btn" data-id="${p.id}" data-revision="${p.revision || 1}" data-status="${p.status || 'active'}">${p.status === 'completed' ? '重新开启' : '标记完成'}</button>
                   <button class="delete-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">删除</button>
-                  <button class="enter-project-btn" data-id="${p.id}">进入项目</button>
+                  <button class="enter-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}">进入项目</button>
                 </div>
               </div>
             </div>
@@ -225,7 +225,12 @@
         </div>
       `;
 
-      const enterProject = (projectId) => {
+      const enterProject = (projectId, projectName) => {
+        // 推荐攻略项目：直接打开自定义HTML攻略页
+        if (projectName === '周边休闲度假推荐') {
+          window.open(API_BASE + '/api/guide-pages/' + encodeURIComponent(projectName), '_blank');
+          return;
+        }
         localStorage.setItem('currentProjectId', projectId);
         window.location.href = 'index.html';
       };
@@ -234,7 +239,8 @@
       document.querySelectorAll('.project-card').forEach(card => {
         card.addEventListener('click', (event) => {
           if (event.target.closest('button, a, input, select, textarea, label')) return;
-          enterProject(card.dataset.id);
+          const title = card.querySelector('h3');
+          enterProject(card.dataset.id, title ? title.textContent.trim() : '');
         });
       });
 
@@ -253,7 +259,7 @@
       document.querySelectorAll('.enter-project-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          enterProject(btn.dataset.id);
+          enterProject(btn.dataset.id, btn.dataset.name);
         });
       });
       
